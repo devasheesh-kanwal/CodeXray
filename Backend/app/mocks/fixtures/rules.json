@@ -1,0 +1,32 @@
+{
+  "rules": [
+    {
+      "id": "R1",
+      "title": "Every route requires login",
+      "description": "Every Flask route in app/routes.py must be wrapped in @login_required.",
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "R2",
+      "title": "Parameterized SQL only",
+      "description": "SQL must use ? placeholders; never build queries with f-strings or string concatenation.",
+      "severity": "critical",
+      "enabled": true
+    },
+    {
+      "id": "R3",
+      "title": "List endpoints are bounded",
+      "description": "Endpoints that return lists must apply a LIMIT so one request cannot load the whole table.",
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "R4",
+      "title": "Database access through get_db",
+      "description": "Open SQLite connections only via app.db.get_db, never sqlite3.connect directly.",
+      "severity": "low",
+      "enabled": false
+    }
+  ]
+}

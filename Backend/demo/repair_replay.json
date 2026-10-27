@@ -1,0 +1,1502 @@
+{
+ "about": "Recorded live CodeXray repair run on the codexray-demo repo (bug: is_overdue used >=). events = GET /api/repairs/{run_id} events after approval (RepairEvent format, same as SSE repair_event). sse = the raw SSE stream as received live (repair_event + done).",
+ "run_id": "run_3879ee368500",
+ "issue": "is_overdue() reports a loan as overdue on its due date, so a member whose book is due today is blocked from borrowing. A book should only be overdue after the due date.",
+ "test_command": "python -m pytest -q",
+ "final_state": "MERGED",
+ "attempt": 1,
+ "usage": {
+  "llm_calls": 15,
+  "tokens": 23686,
+  "seconds": 65.706
+ },
+ "models_used": {
+  "architect": [
+   "gemini/gemini-3.5-flash-lite"
+  ],
+  "debugger": [
+   "groq/openai/gpt-oss-120b",
+   "groq/qwen/qwen3.8-27b",
+   "gemini/gemini-3.5-flash-lite"
+  ],
+  "repair": [
+   "gemini/gemini-3.5-flash-lite",
+   "groq/openai/gpt-oss-120b",
+   "groq/qwen/qwen3.8-27b"
+  ]
+ },
+ "approved_branch": "codexray/approved-run_3879ee368500",
+ "events": [
+  {
+   "ts": "2026-10-27T13:23:40.104167Z",
+   "state": "CREATED",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Repair run created.",
+   "data": {
+    "issue": "is_overdue() reports a loan as overdue on its due date, so a member whose book is due today is blocked from borrowing. A book should only be overdue after the due date."
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:40.105971Z",
+   "state": "BASELINE",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Running the tests on the current checkout to confirm the failure.",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:23:40.107502Z",
+   "state": "BASELINE",
+   "attempt": 1,
+   "agent": "test_runner",
+   "kind": "agent",
+   "message": "test_runner started (baseline)",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:23:40.116882Z",
+   "state": "BASELINE",
+   "attempt": 1,
+   "agent": "test_runner",
+   "kind": "note",
+   "message": "Docker is not available: tests run as a plain subprocess with a timeout. This sandbox is weaker (no network or file system isolation).",
+   "data": {
+    "recoverable": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:40.969949Z",
+   "state": "BASELINE",
+   "attempt": 1,
+   "agent": "test_runner",
+   "kind": "tests",
+   "message": "baseline in subprocess: 7 passed, 2 failed",
+   "data": {
+    "sandbox": "subprocess",
+    "passed": 7,
+    "failed": 2,
+    "failing": [
+     "tests/test_loans.py::test_not_overdue_on_the_due_date",
+     "tests/test_members.py::test_member_whose_book_is_due_today_can_still_borrow"
+    ],
+    "error": null
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:40.971942Z",
+   "state": "PLANNING",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Architect is picking the files to change.",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:23:40.973728Z",
+   "state": "PLANNING",
+   "attempt": 1,
+   "agent": "architect",
+   "kind": "agent",
+   "message": "architect started",
+   "data": {
+    "lane": "long_context"
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:40.977457Z",
+   "state": "PLANNING",
+   "attempt": 1,
+   "agent": "architect",
+   "kind": "agent",
+   "message": "search_code({\"query\": \"is_overdue\"})",
+   "data": {
+    "tool": "search_code",
+    "args": {
+     "query": "is_overdue"
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:41.009445Z",
+   "state": "PLANNING",
+   "attempt": 1,
+   "agent": "architect",
+   "kind": "agent",
+   "message": "8 results (hybrid); top library/loans.py:23-27",
+   "data": {
+    "tool": "search_code",
+    "ok": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:41.013017Z",
+   "state": "PLANNING",
+   "attempt": 1,
+   "agent": "architect",
+   "kind": "agent",
+   "message": "read_file({\"end\": 50, \"path\": \"library/loans.py\", \"start\": 1})",
+   "data": {
+    "tool": "read_file",
+    "args": {
+     "end": 50,
+     "path": "library/loans.py",
+     "start": 1
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:41.023762Z",
+   "state": "PLANNING",
+   "attempt": 1,
+   "agent": "architect",
+   "kind": "agent",
+   "message": "read library/loans.py:1-37",
+   "data": {
+    "tool": "read_file",
+    "ok": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:41.027398Z",
+   "state": "PLANNING",
+   "attempt": 1,
+   "agent": "architect",
+   "kind": "agent",
+   "message": "picked 1 files: library/loans.py",
+   "data": {
+    "output": {
+     "files": [
+      {
+       "file": "library/loans.py",
+       "reason": "Contains is_overdue() which incorrectly checks whether today >= loan.due_on instead of today > loan.due_on."
+      }
+     ],
+     "summary": "The is_overdue function in library/loans.py checks if today >= loan.due_on, making books overdue on their due date rather than strictly after."
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:41.029625Z",
+   "state": "BRANCHED",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Creating a git worktree branch for the fix.",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:23:41.178401Z",
+   "state": "BRANCHED",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "note",
+   "message": "Created branch codexray/fix-run_3879ee368500 in a worktree",
+   "data": {
+    "branch": "codexray/fix-run_3879ee368500",
+    "base_commit": "cdc530f2004ca7a1bc5304102a310dc76f466be2"
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:41.180048Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Debugger is looking for the root cause.",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:23:41.181381Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "debugger started",
+   "data": {
+    "lane": "heavy_code"
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:41.934317Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "read_test_output({\"run_id\": \"run_3879ee368500\"})",
+   "data": {
+    "tool": "read_test_output",
+    "args": {
+     "run_id": "run_3879ee368500"
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:41.936813Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "attempt baseline: 7 passed, 2 failed",
+   "data": {
+    "tool": "read_test_output",
+    "ok": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:42.533673Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "read_file({\"end\": 400, \"path\": \"library/loans.py\", \"start\": 1})",
+   "data": {
+    "tool": "read_file",
+    "args": {
+     "end": 400,
+     "path": "library/loans.py",
+     "start": 1
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:42.537461Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "read library/loans.py:1-37",
+   "data": {
+    "tool": "read_file",
+    "ok": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:42.961264Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "search_code({\"query\": \"def can_borrow\"})",
+   "data": {
+    "tool": "search_code",
+    "args": {
+     "query": "def can_borrow"
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:42.969408Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "8 results (hybrid); top library/members.py:20-25",
+   "data": {
+    "tool": "search_code",
+    "ok": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:43.452331Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "read_file({\"end\": 300, \"path\": \"library/loans.py\", \"start\": 1})",
+   "data": {
+    "tool": "read_file",
+    "args": {
+     "end": 300,
+     "path": "library/loans.py",
+     "start": 1
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:43.454503Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "read library/loans.py:1-37",
+   "data": {
+    "tool": "read_file",
+    "ok": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:45.719580Z",
+   "state": "DIAGNOSING",
+   "attempt": 1,
+   "agent": "debugger",
+   "kind": "agent",
+   "message": "root cause in library/loans.py:23-28: The is_overdue function checks if today >= loan.due_on, which incorrectly marks loans as overdue on their due date (when",
+   "data": {
+    "output": {
+     "root_cause": "The is_overdue function checks if today >= loan.due_on, which incorrectly marks loans as overdue on their due date (when today equals loan.due_on). A book should only be overdue after the due date (i.e. today > loan.due_on).",
+     "file": "library/loans.py",
+     "start_line": 23,
+     "end_line": 28,
+     "evidence": [
+      "def is_overdue(loan: Loan, today: date) -> bool:",
+      "    \"\"\"True if the book is still out after its due date.\"\"\"",
+      "    if loan.returned_on is not None:",
+      "        return False",
+      "    return today >= loan.due_on"
+     ],
+     "fix_plan": "Change the return statement in is_overdue() from `return today >= loan.due_on` to `return today > loan.due_on` so that a loan is only considered overdue when today is strictly after the due date."
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:45.721078Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Repair agent is writing a patch.",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:23:45.722693Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "repair started",
+   "data": {
+    "lane": "heavy_code"
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:51.657285Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "read_file({\"start\": 15, \"end\": 35, \"path\": \"library/loans.py\"})",
+   "data": {
+    "tool": "read_file",
+    "args": {
+     "start": 15,
+     "end": 35,
+     "path": "library/loans.py"
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:51.659716Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "read library/loans.py:15-35",
+   "data": {
+    "tool": "read_file",
+    "ok": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:52.377859Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "write_patch({\"diff\": \"*** Begin Patch\\n*** Update File: library/loans.py\\n@@\\n-    return...)",
+   "data": {
+    "tool": "write_patch",
+    "args": {
+     "diff": "*** Begin Patch\n*** Update File: library/loans.py\n@@\n-    return today >= loan.due_on\n+    # A loan is only overdue after its due date, not on the due date itself.\n+    return today > loan.due_on\n*** End Patch"
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:52.379689Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "write_patch failed: the diff names no files (expected ---/+++ lines)",
+   "data": {
+    "tool": "write_patch",
+    "ok": false
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:53.047805Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "write_patch({\"diff\": \"*** Begin Patch\\n*** Update File: library/loans.py\\n@@\\n-    return...)",
+   "data": {
+    "tool": "write_patch",
+    "args": {
+     "diff": "*** Begin Patch\n*** Update File: library/loans.py\n@@\n-    return today >= loan.due_on\n+    # A loan is only overdue after its due date, not on the due date itself.\n+    return today > loan.due_on\n*** End Patch"
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:23:53.050381Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "write_patch failed: the diff names no files (expected ---/+++ lines)",
+   "data": {
+    "tool": "write_patch",
+    "ok": false
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:07.157971Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "write_patch({\"diff\": \"--- a/library/loans.py\\n+++ b/library/loans.py\\n@@ -26,3 +26,3 @@\\n...)",
+   "data": {
+    "tool": "write_patch",
+    "args": {
+     "diff": "--- a/library/loans.py\n+++ b/library/loans.py\n@@ -26,3 +26,3 @@\n     if loan.returned_on is not None:\n         return False\n-    return today >= loan.due_on\n+    return today > loan.due_on\n"
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:07.184401Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "write_patch failed: patch does not apply: error: patch failed: library/loans.py:26\nerror: library/lo",
+   "data": {
+    "tool": "write_patch",
+    "ok": false
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:07.968263Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "read_file({\"end\": 200, \"path\": \"library/loans.py\", \"start\": 1})",
+   "data": {
+    "tool": "read_file",
+    "args": {
+     "end": 200,
+     "path": "library/loans.py",
+     "start": 1
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:07.970793Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "read library/loans.py:1-37",
+   "data": {
+    "tool": "read_file",
+    "ok": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:08.661740Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "write_patch({\"diff\": \"--- a/library/loans.py\\n+++ b/library/loans.py\\n@@ -24,7 +24,7 @@\\n...)",
+   "data": {
+    "tool": "write_patch",
+    "args": {
+     "diff": "--- a/library/loans.py\n+++ b/library/loans.py\n@@ -24,7 +24,7 @@\n def is_overdue(loan: Loan, today: date) -> bool:\n     \"\"\"True if the book is still out after its due date.\"\"\"\n     if loan.returned_on is not None:\n         return False\n-    return today >= loan.due_on\n+    return today > loan.due_on\n \n \n def days_late(loan: Loan, today: date) -> int:\n"
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:08.712965Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "patched 1 file(s)",
+   "data": {
+    "tool": "write_patch",
+    "ok": true
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:15.802267Z",
+   "state": "PATCHING",
+   "attempt": 1,
+   "agent": "repair",
+   "kind": "agent",
+   "message": "patched library/loans.py",
+   "data": {
+    "output": {
+     "summary": "Updated is_overdue() in library/loans.py to check `today > loan.due_on` instead of `today >= loan.due_on`, ensuring books are only considered overdue strictly after their due date.",
+     "files_changed": [
+      "library/loans.py"
+     ]
+    }
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:15.831906Z",
+   "state": "TESTING",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Running the tests on the patched branch.",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:24:15.833450Z",
+   "state": "TESTING",
+   "attempt": 1,
+   "agent": "test_runner",
+   "kind": "agent",
+   "message": "test_runner started (attempt-1)",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:24:16.616062Z",
+   "state": "TESTING",
+   "attempt": 1,
+   "agent": "test_runner",
+   "kind": "tests",
+   "message": "attempt-1 in subprocess: 9 passed, 0 failed",
+   "data": {
+    "sandbox": "subprocess",
+    "passed": 9,
+    "failed": 0,
+    "failing": [],
+    "error": null
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:16.618291Z",
+   "state": "EVALUATING",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Eval gate is checking the result.",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:24:16.619839Z",
+   "state": "EVALUATING",
+   "attempt": 1,
+   "agent": "eval_gate",
+   "kind": "agent",
+   "message": "eval_gate started",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:24:16.934264Z",
+   "state": "EVALUATING",
+   "attempt": 1,
+   "agent": "eval_gate",
+   "kind": "eval",
+   "message": "eval passed: 5/5 checks pass",
+   "data": {
+    "passed": true,
+    "checks": [
+     {
+      "name": "target_test_passes",
+      "passed": true,
+      "detail": "All 2 target tests now pass: tests/test_loans.py::test_not_overdue_on_the_due_date, tests/test_members.py::test_member_whose_book_is_due_today_can_still_borrow."
+     },
+     {
+      "name": "no_regressions",
+      "passed": true,
+      "detail": "All tests that passed at baseline still pass (7)."
+     },
+     {
+      "name": "lint_clean",
+      "passed": true,
+      "detail": "ruff reports no new issues on changed lines."
+     },
+     {
+      "name": "no_test_files_changed",
+      "passed": true,
+      "detail": "The patch changes only library/loans.py."
+     },
+     {
+      "name": "patch_size",
+      "passed": true,
+      "detail": "2 changed lines (limit 80)."
+     }
+    ]
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:16.935846Z",
+   "state": "REVIEWING",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Reviewer (a different model) is reviewing the patch.",
+   "data": {}
+  },
+  {
+   "ts": "2026-10-27T13:24:16.938043Z",
+   "state": "REVIEWING",
+   "attempt": 1,
+   "agent": "reviewer",
+   "kind": "agent",
+   "message": "reviewer started",
+   "data": {
+    "lane": "reviewer"
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:18.230813Z",
+   "state": "REVIEWING",
+   "attempt": 1,
+   "agent": "reviewer",
+   "kind": "error",
+   "message": "reviewer failed: All models in lane 'reviewer' failed:",
+   "data": {
+    "recoverable": false
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:18.232517Z",
+   "state": "AWAITING_APPROVAL",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Waiting for human approval.",
+   "data": {
+    "branch": "codexray/fix-run_3879ee368500"
+   }
+  },
+  {
+   "ts": "2026-10-27T13:24:45.809166Z",
+   "state": "MERGED",
+   "attempt": 1,
+   "agent": "coordinator",
+   "kind": "state",
+   "message": "Approved; merged into a local branch (not pushed).",
+   "data": {
+    "branch": "codexray/approved-run_3879ee368500"
+   }
+  }
+ ],
+ "sse": [
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:40.104167Z",
+    "state": "CREATED",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Repair run created.",
+    "data": {
+     "issue": "is_overdue() reports a loan as overdue on its due date, so a member whose book is due today is blocked from borrowing. A book should only be overdue after the due date."
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:40.105971Z",
+    "state": "BASELINE",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Running the tests on the current checkout to confirm the failure.",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:40.107502Z",
+    "state": "BASELINE",
+    "attempt": 1,
+    "agent": "test_runner",
+    "kind": "agent",
+    "message": "test_runner started (baseline)",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:40.116882Z",
+    "state": "BASELINE",
+    "attempt": 1,
+    "agent": "test_runner",
+    "kind": "note",
+    "message": "Docker is not available: tests run as a plain subprocess with a timeout. This sandbox is weaker (no network or file system isolation).",
+    "data": {
+     "recoverable": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:40.969949Z",
+    "state": "BASELINE",
+    "attempt": 1,
+    "agent": "test_runner",
+    "kind": "tests",
+    "message": "baseline in subprocess: 7 passed, 2 failed",
+    "data": {
+     "sandbox": "subprocess",
+     "passed": 7,
+     "failed": 2,
+     "failing": [
+      "tests/test_loans.py::test_not_overdue_on_the_due_date",
+      "tests/test_members.py::test_member_whose_book_is_due_today_can_still_borrow"
+     ],
+     "error": null
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:40.971942Z",
+    "state": "PLANNING",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Architect is picking the files to change.",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:40.973728Z",
+    "state": "PLANNING",
+    "attempt": 1,
+    "agent": "architect",
+    "kind": "agent",
+    "message": "architect started",
+    "data": {
+     "lane": "long_context"
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:40.977457Z",
+    "state": "PLANNING",
+    "attempt": 1,
+    "agent": "architect",
+    "kind": "agent",
+    "message": "search_code({\"query\": \"is_overdue\"})",
+    "data": {
+     "tool": "search_code",
+     "args": {
+      "query": "is_overdue"
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.009445Z",
+    "state": "PLANNING",
+    "attempt": 1,
+    "agent": "architect",
+    "kind": "agent",
+    "message": "8 results (hybrid); top library/loans.py:23-27",
+    "data": {
+     "tool": "search_code",
+     "ok": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.013017Z",
+    "state": "PLANNING",
+    "attempt": 1,
+    "agent": "architect",
+    "kind": "agent",
+    "message": "read_file({\"end\": 50, \"path\": \"library/loans.py\", \"start\": 1})",
+    "data": {
+     "tool": "read_file",
+     "args": {
+      "end": 50,
+      "path": "library/loans.py",
+      "start": 1
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.023762Z",
+    "state": "PLANNING",
+    "attempt": 1,
+    "agent": "architect",
+    "kind": "agent",
+    "message": "read library/loans.py:1-37",
+    "data": {
+     "tool": "read_file",
+     "ok": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.027398Z",
+    "state": "PLANNING",
+    "attempt": 1,
+    "agent": "architect",
+    "kind": "agent",
+    "message": "picked 1 files: library/loans.py",
+    "data": {
+     "output": {
+      "files": [
+       {
+        "file": "library/loans.py",
+        "reason": "Contains is_overdue() which incorrectly checks whether today >= loan.due_on instead of today > loan.due_on."
+       }
+      ],
+      "summary": "The is_overdue function in library/loans.py checks if today >= loan.due_on, making books overdue on their due date rather than strictly after."
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.029625Z",
+    "state": "BRANCHED",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Creating a git worktree branch for the fix.",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.178401Z",
+    "state": "BRANCHED",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "note",
+    "message": "Created branch codexray/fix-run_3879ee368500 in a worktree",
+    "data": {
+     "branch": "codexray/fix-run_3879ee368500",
+     "base_commit": "cdc530f2004ca7a1bc5304102a310dc76f466be2"
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.180048Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Debugger is looking for the root cause.",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.181381Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "debugger started",
+    "data": {
+     "lane": "heavy_code"
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.934317Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "read_test_output({\"run_id\": \"run_3879ee368500\"})",
+    "data": {
+     "tool": "read_test_output",
+     "args": {
+      "run_id": "run_3879ee368500"
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:41.936813Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "attempt baseline: 7 passed, 2 failed",
+    "data": {
+     "tool": "read_test_output",
+     "ok": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:42.533673Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "read_file({\"end\": 400, \"path\": \"library/loans.py\", \"start\": 1})",
+    "data": {
+     "tool": "read_file",
+     "args": {
+      "end": 400,
+      "path": "library/loans.py",
+      "start": 1
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:42.537461Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "read library/loans.py:1-37",
+    "data": {
+     "tool": "read_file",
+     "ok": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:42.961264Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "search_code({\"query\": \"def can_borrow\"})",
+    "data": {
+     "tool": "search_code",
+     "args": {
+      "query": "def can_borrow"
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:42.969408Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "8 results (hybrid); top library/members.py:20-25",
+    "data": {
+     "tool": "search_code",
+     "ok": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:43.452331Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "read_file({\"end\": 300, \"path\": \"library/loans.py\", \"start\": 1})",
+    "data": {
+     "tool": "read_file",
+     "args": {
+      "end": 300,
+      "path": "library/loans.py",
+      "start": 1
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:43.454503Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "read library/loans.py:1-37",
+    "data": {
+     "tool": "read_file",
+     "ok": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:45.719580Z",
+    "state": "DIAGNOSING",
+    "attempt": 1,
+    "agent": "debugger",
+    "kind": "agent",
+    "message": "root cause in library/loans.py:23-28: The is_overdue function checks if today >= loan.due_on, which incorrectly marks loans as overdue on their due date (when",
+    "data": {
+     "output": {
+      "root_cause": "The is_overdue function checks if today >= loan.due_on, which incorrectly marks loans as overdue on their due date (when today equals loan.due_on). A book should only be overdue after the due date (i.e. today > loan.due_on).",
+      "file": "library/loans.py",
+      "start_line": 23,
+      "end_line": 28,
+      "evidence": [
+       "def is_overdue(loan: Loan, today: date) -> bool:",
+       "    \"\"\"True if the book is still out after its due date.\"\"\"",
+       "    if loan.returned_on is not None:",
+       "        return False",
+       "    return today >= loan.due_on"
+      ],
+      "fix_plan": "Change the return statement in is_overdue() from `return today >= loan.due_on` to `return today > loan.due_on` so that a loan is only considered overdue when today is strictly after the due date."
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:45.721078Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Repair agent is writing a patch.",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:45.722693Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "repair started",
+    "data": {
+     "lane": "heavy_code"
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:51.657285Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "read_file({\"start\": 15, \"end\": 35, \"path\": \"library/loans.py\"})",
+    "data": {
+     "tool": "read_file",
+     "args": {
+      "start": 15,
+      "end": 35,
+      "path": "library/loans.py"
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:51.659716Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "read library/loans.py:15-35",
+    "data": {
+     "tool": "read_file",
+     "ok": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:52.377859Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "write_patch({\"diff\": \"*** Begin Patch\\n*** Update File: library/loans.py\\n@@\\n-    return...)",
+    "data": {
+     "tool": "write_patch",
+     "args": {
+      "diff": "*** Begin Patch\n*** Update File: library/loans.py\n@@\n-    return today >= loan.due_on\n+    # A loan is only overdue after its due date, not on the due date itself.\n+    return today > loan.due_on\n*** End Patch"
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:52.379689Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "write_patch failed: the diff names no files (expected ---/+++ lines)",
+    "data": {
+     "tool": "write_patch",
+     "ok": false
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:53.047805Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "write_patch({\"diff\": \"*** Begin Patch\\n*** Update File: library/loans.py\\n@@\\n-    return...)",
+    "data": {
+     "tool": "write_patch",
+     "args": {
+      "diff": "*** Begin Patch\n*** Update File: library/loans.py\n@@\n-    return today >= loan.due_on\n+    # A loan is only overdue after its due date, not on the due date itself.\n+    return today > loan.due_on\n*** End Patch"
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:23:53.050381Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "write_patch failed: the diff names no files (expected ---/+++ lines)",
+    "data": {
+     "tool": "write_patch",
+     "ok": false
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:07.157971Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "write_patch({\"diff\": \"--- a/library/loans.py\\n+++ b/library/loans.py\\n@@ -26,3 +26,3 @@\\n...)",
+    "data": {
+     "tool": "write_patch",
+     "args": {
+      "diff": "--- a/library/loans.py\n+++ b/library/loans.py\n@@ -26,3 +26,3 @@\n     if loan.returned_on is not None:\n         return False\n-    return today >= loan.due_on\n+    return today > loan.due_on\n"
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:07.184401Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "write_patch failed: patch does not apply: error: patch failed: library/loans.py:26\nerror: library/lo",
+    "data": {
+     "tool": "write_patch",
+     "ok": false
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:07.968263Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "read_file({\"end\": 200, \"path\": \"library/loans.py\", \"start\": 1})",
+    "data": {
+     "tool": "read_file",
+     "args": {
+      "end": 200,
+      "path": "library/loans.py",
+      "start": 1
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:07.970793Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "read library/loans.py:1-37",
+    "data": {
+     "tool": "read_file",
+     "ok": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:08.661740Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "write_patch({\"diff\": \"--- a/library/loans.py\\n+++ b/library/loans.py\\n@@ -24,7 +24,7 @@\\n...)",
+    "data": {
+     "tool": "write_patch",
+     "args": {
+      "diff": "--- a/library/loans.py\n+++ b/library/loans.py\n@@ -24,7 +24,7 @@\n def is_overdue(loan: Loan, today: date) -> bool:\n     \"\"\"True if the book is still out after its due date.\"\"\"\n     if loan.returned_on is not None:\n         return False\n-    return today >= loan.due_on\n+    return today > loan.due_on\n \n \n def days_late(loan: Loan, today: date) -> int:\n"
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:08.712965Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "patched 1 file(s)",
+    "data": {
+     "tool": "write_patch",
+     "ok": true
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:15.802267Z",
+    "state": "PATCHING",
+    "attempt": 1,
+    "agent": "repair",
+    "kind": "agent",
+    "message": "patched library/loans.py",
+    "data": {
+     "output": {
+      "summary": "Updated is_overdue() in library/loans.py to check `today > loan.due_on` instead of `today >= loan.due_on`, ensuring books are only considered overdue strictly after their due date.",
+      "files_changed": [
+       "library/loans.py"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:15.831906Z",
+    "state": "TESTING",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Running the tests on the patched branch.",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:15.833450Z",
+    "state": "TESTING",
+    "attempt": 1,
+    "agent": "test_runner",
+    "kind": "agent",
+    "message": "test_runner started (attempt-1)",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:16.616062Z",
+    "state": "TESTING",
+    "attempt": 1,
+    "agent": "test_runner",
+    "kind": "tests",
+    "message": "attempt-1 in subprocess: 9 passed, 0 failed",
+    "data": {
+     "sandbox": "subprocess",
+     "passed": 9,
+     "failed": 0,
+     "failing": [],
+     "error": null
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:16.618291Z",
+    "state": "EVALUATING",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Eval gate is checking the result.",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:16.619839Z",
+    "state": "EVALUATING",
+    "attempt": 1,
+    "agent": "eval_gate",
+    "kind": "agent",
+    "message": "eval_gate started",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:16.934264Z",
+    "state": "EVALUATING",
+    "attempt": 1,
+    "agent": "eval_gate",
+    "kind": "eval",
+    "message": "eval passed: 5/5 checks pass",
+    "data": {
+     "passed": true,
+     "checks": [
+      {
+       "name": "target_test_passes",
+       "passed": true,
+       "detail": "All 2 target tests now pass: tests/test_loans.py::test_not_overdue_on_the_due_date, tests/test_members.py::test_member_whose_book_is_due_today_can_still_borrow."
+      },
+      {
+       "name": "no_regressions",
+       "passed": true,
+       "detail": "All tests that passed at baseline still pass (7)."
+      },
+      {
+       "name": "lint_clean",
+       "passed": true,
+       "detail": "ruff reports no new issues on changed lines."
+      },
+      {
+       "name": "no_test_files_changed",
+       "passed": true,
+       "detail": "The patch changes only library/loans.py."
+      },
+      {
+       "name": "patch_size",
+       "passed": true,
+       "detail": "2 changed lines (limit 80)."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:16.935846Z",
+    "state": "REVIEWING",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Reviewer (a different model) is reviewing the patch.",
+    "data": {}
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:16.938043Z",
+    "state": "REVIEWING",
+    "attempt": 1,
+    "agent": "reviewer",
+    "kind": "agent",
+    "message": "reviewer started",
+    "data": {
+     "lane": "reviewer"
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:18.230813Z",
+    "state": "REVIEWING",
+    "attempt": 1,
+    "agent": "reviewer",
+    "kind": "error",
+    "message": "reviewer failed: All models in lane 'reviewer' failed:",
+    "data": {
+     "recoverable": false
+    }
+   }
+  },
+  {
+   "event": "repair_event",
+   "data": {
+    "ts": "2026-10-27T13:24:18.232517Z",
+    "state": "AWAITING_APPROVAL",
+    "attempt": 1,
+    "agent": "coordinator",
+    "kind": "state",
+    "message": "Waiting for human approval.",
+    "data": {
+     "branch": "codexray/fix-run_3879ee368500"
+    }
+   }
+  },
+  {
+   "event": "done",
+   "data": {
+    "state": "AWAITING_APPROVAL"
+   }
+  }
+ ]
+}

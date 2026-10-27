@@ -1,0 +1,22 @@
+# Runtime
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.16.1
+openai==3.39.0
+httpx2==2.16.0
+PyYAML==6.0.3
+
+# Indexing
+tree-sitter==0.25.2  # 0.26.0 crashes (access violation) on Windows + Python 3.13
+tree-sitter-python==0.25.0
+networkx==3.7
+rank-bm25==0.2.2
+chromadb==1.5.9
+pathspec==1.1.1
+
+# Repair (eval gate lint check)
+ruff==0.17.3
+
+# Tests
+pytest==9.1.1

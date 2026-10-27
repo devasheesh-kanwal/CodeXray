@@ -1,0 +1,112 @@
+{
+  "repo_id": "repo_flask_todo",
+  "root": {
+    "name": "flask-todo",
+    "path": "",
+    "type": "folder",
+    "children": [
+      {
+        "name": "app",
+        "path": "app",
+        "type": "folder",
+        "children": [
+          {
+            "name": "__init__.py",
+            "path": "app/__init__.py",
+            "type": "file",
+            "symbols": [
+              {"name": "create_app", "kind": "function", "start_line": 7, "end_line": 17}
+            ]
+          },
+          {
+            "name": "auth.py",
+            "path": "app/auth.py",
+            "type": "file",
+            "symbols": [
+              {"name": "verify_token", "kind": "function", "start_line": 6, "end_line": 9},
+              {
+                "name": "login_required",
+                "kind": "function",
+                "start_line": 12,
+                "end_line": 25,
+                "children": [
+                  {"name": "wrapped", "kind": "function", "start_line": 16, "end_line": 23}
+                ]
+              }
+            ]
+          },
+          {
+            "name": "db.py",
+            "path": "app/db.py",
+            "type": "file",
+            "symbols": [
+              {"name": "get_db", "kind": "function", "start_line": 6, "end_line": 11},
+              {"name": "close_db", "kind": "function", "start_line": 14, "end_line": 17},
+              {"name": "init_db", "kind": "function", "start_line": 20, "end_line": 29}
+            ]
+          },
+          {
+            "name": "models.py",
+            "path": "app/models.py",
+            "type": "file",
+            "symbols": [
+              {
+                "name": "Todo",
+                "kind": "class",
+                "start_line": 5,
+                "end_line": 16,
+                "children": [
+                  {"name": "from_row", "kind": "method", "start_line": 12, "end_line": 13},
+                  {"name": "to_dict", "kind": "method", "start_line": 15, "end_line": 16}
+                ]
+              }
+            ]
+          },
+          {
+            "name": "routes.py",
+            "path": "app/routes.py",
+            "type": "file",
+            "symbols": [
+              {"name": "list_todos", "kind": "function", "start_line": 12, "end_line": 16},
+              {"name": "create_todo", "kind": "function", "start_line": 21, "end_line": 31},
+              {"name": "delete_todo", "kind": "function", "start_line": 36, "end_line": 44}
+            ]
+          }
+        ]
+      },
+      {
+        "name": "tests",
+        "path": "tests",
+        "type": "folder",
+        "children": [
+          {
+            "name": "test_routes.py",
+            "path": "tests/test_routes.py",
+            "type": "file",
+            "symbols": [
+              {
+                "name": "make_client",
+                "kind": "function",
+                "start_line": 6,
+                "end_line": 11,
+                "children": [
+                  {"name": "TestConfig", "kind": "class", "start_line": 7, "end_line": 9}
+                ]
+              },
+              {"name": "test_create_and_list", "kind": "function", "start_line": 14, "end_line": 18},
+              {"name": "test_delete_missing_todo_returns_404", "kind": "function", "start_line": 21, "end_line": 24}
+            ]
+          }
+        ]
+      },
+      {
+        "name": "config.py",
+        "path": "config.py",
+        "type": "file",
+        "symbols": [
+          {"name": "Config", "kind": "class", "start_line": 4, "end_line": 6}
+        ]
+      }
+    ]
+  }
+}

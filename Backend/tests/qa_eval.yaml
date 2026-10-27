@@ -1,0 +1,46 @@
+# Q&A eval set for the demo repo (tests/fixtures/sample_repo, a tiny shop app).
+# Run: python scripts/eval_qa.py <repo_id>
+#
+# - question:  a real question about the demo repo
+# - must_cite: repo-relative file(s) a correct answer has to cite
+#              (forward slashes, exactly as in GET /api/repos/{id}/tree)
+# - expect_not_found: true for questions the repo cannot answer
+
+questions:
+  - id: q1
+    question: "How is a user found by id, step by step?"  # flow: api -> service -> db
+    must_cite: ["shop/api.py", "shop/services.py", "shop/db.py"]
+
+  - id: q2
+    question: "How is a new user created and saved?"
+    must_cite: ["shop/services.py", "shop/db.py"]
+
+  - id: q3
+    question: "Where is user data stored?"
+    must_cite: ["shop/db.py"]
+
+  - id: q4
+    question: "What fields does the User model have?"
+    must_cite: ["shop/models.py"]
+
+  - id: q5
+    question: "How is a user's display name formatted?"
+    must_cite: ["shop/models.py"]
+
+  - id: q6
+    question: "How are HTTP headers parsed?"
+    must_cite: ["shop/utils/helpers.py"]
+
+  - id: q7
+    question: "How is the user agent read from raw request headers?"
+    must_cite: ["shop/services.py", "shop/utils/helpers.py"]
+
+  - id: q8
+    question: "What does the logged decorator do?"
+    must_cite: ["shop/api.py"]
+
+  # Not in any repo: the right answer is "No relevant code found".
+  - id: off_topic
+    question: "How is the Kubernetes Helm chart configured for autoscaling?"
+    must_cite: []
+    expect_not_found: true
