@@ -97,17 +97,20 @@ export default function Topbar() {
   });
 
   const repos = reposQ.data || [];
-  const selected = repos.find((r) => r.id === selectedRepoId) || null;
+  const selected = repos.find((r) => r.repo_id === selectedRepoId) || null;
+  // The model that answered last (the API has no single "active model").
+  const activeModel = [...(statusQ.data?.recent_calls || [])].reverse().find((c) => c.ok)?.model;
 
   useEffect(() => {
     if (!selectedRepoId && repos.length > 0) {
-      setSelectedRepoId(repos[0].id);
-      setSelectedRepo(repos[0]);
+      const first = repos.find((r) => r.status === 'ready') || repos[0];
+      setSelectedRepoId(first.repo_id);
+      setSelectedRepo(first);
     }
   }, [repos, selectedRepoId, setSelectedRepoId, setSelectedRepo]);
 
   function select(r: Repo) {
-    setSelectedRepoId(r.id);
+    setSelectedRepoId(r.repo_id);
     setSelectedRepo(r);
     setOpen(false);
   }
@@ -152,10 +155,10 @@ export default function Topbar() {
               )}
               {repos.map((r) => (
                 <button
-                  key={r.id}
+                  key={r.repo_id}
                   type="button"
                   onClick={() => select(r)}
-                  style={S.dropdownItem(r.id === selectedRepoId)}
+                  style={S.dropdownItem(r.repo_id === selectedRepoId)}
                 >
                   {r.name}
                 </button>
@@ -182,9 +185,9 @@ export default function Topbar() {
           {badge}
         </span>
         {/* Active model */}
-        {statusQ.data?.activeModel && (
+        {activeModel && (
           <span style={{ ...S.badge(), color: '#8FA8A0', fontSize: '11px' }}>
-            {statusQ.data.activeModel}
+            {activeModel}
           </span>
         )}
       </div>

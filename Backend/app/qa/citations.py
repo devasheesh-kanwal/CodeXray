@@ -19,6 +19,8 @@ LOOSE_MARKERS = [
     re.compile(r"`([\w./\\-]+\.\w+):(\d+)(?:-(\d+))?`"),  # `file.py:a-b` (no brackets)
     re.compile(r"\[([^\[\]:]+):(\d+)\]"),  # [file:5] (one line)
 ]
+# Several references in one bracket: [a.py:1-2, b.py:5] (split before the rest)
+GROUPED_MARKER = re.compile(r"\[([^\[\]:,;]+:\d+(?:-\d+)?(?:\s*[,;]\s*[^\[\]:,;]+:\d+(?:-\d+)?)+)\]")
 SENTENCE_END = re.compile(r"[.!?](?:\s+|$)|\n")
 NOT_FOUND_LINE = "NOT_FOUND"
 NOT_FOUND_ANSWER = "No relevant code found for this question"
@@ -50,11 +52,15 @@ class CheckResult:
 
 
 def normalize_markers(answer: str) -> str:
-    """Rewrite `[f:a-b]`, `f.py:a-b` and [f:a] as [f:a-b] so they get checked too."""
+    """Rewrite `[f:a-b]`, `f.py:a-b`, [f:a] and [f:a-b, g:c] as [f:a-b] markers."""
     def rewrite(match: re.Match) -> str:
         file, start, end = (*match.groups(), None)[:3]
         return f"[{file}:{start}-{end or start}]"
 
+    def split_group(match: re.Match) -> str:
+        return " ".join(f"[{ref.strip()}]" for ref in re.split(r"[,;]", match.group(1)))
+
+    answer = GROUPED_MARKER.sub(split_group, answer)
     for pattern in LOOSE_MARKERS:
         answer = pattern.sub(rewrite, answer)
     return answer

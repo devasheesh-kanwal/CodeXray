@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api/client';
 import { useRepo } from '../context/RepoContext';
-import { Loading, EmptyState, ErrorBanner } from '../components/shared/States';
+import { Loading, EmptyState, ApiErrorView } from '../components/shared/States';
 import { CodeViewer } from '../components/shared/CodeViewer';
 import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
 import 'reactflow/dist/style.css';
-import type { FileNode, GraphData } from '../api/types';
+import type { TreeNode, TreeResponse, GraphData, FileSlice } from '../api/types';
 import { Folder, FileCode } from 'lucide-react';
 
 export default function ExplorerPage() {
@@ -18,7 +18,7 @@ export default function ExplorerPage() {
 
   const treeQ = useQuery({
     queryKey: ['tree', selectedRepoId],
-    queryFn: () => apiFetch<FileNode>(`/api/repos/${selectedRepoId}/tree`),
+    queryFn: () => apiFetch<TreeResponse>(`/api/repos/${selectedRepoId}/tree`),
     enabled: !!selectedRepoId,
   });
 
@@ -30,13 +30,14 @@ export default function ExplorerPage() {
 
   const fileQ = useQuery({
     queryKey: ['file', selectedRepoId, selectedFile],
-    queryFn: () => apiFetch<{ path: string; content: string }>(`/api/repos/${selectedRepoId}/file?path=${encodeURIComponent(selectedFile!)}`),
+    queryFn: () => apiFetch<FileSlice>(`/api/repos/${selectedRepoId}/file?path=${encodeURIComponent(selectedFile!)}`),
     enabled: !!selectedRepoId && !!selectedFile,
   });
 
   if (!selectedRepoId) return <EmptyState title="Select a repository" description="Choose a repo in the top bar." />;
 
-  const allNodes = graphQ.data?.nodes || [];
+  // imports link files; calls link functions/classes
+  const allNodes = (graphQ.data?.nodes || []).filter((n) => (graphMode === 'imports' ? n.type === 'file' : n.type !== 'file'));
   const nodes = expanded ? allNodes : allNodes.slice(0, 20);
   const rfNodes = nodes.map((n, i) => ({
     id: n.id,
@@ -55,7 +56,7 @@ export default function ExplorerPage() {
   }));
 
   const rfEdges = (graphQ.data?.edges || [])
-    .filter((e) => (graphMode === 'imports' ? e.kind === 'import' : e.kind === 'call'))
+    .filter((e) => e.type === graphMode)
     .filter((e) => nodes.some((n) => n.id === e.source) && nodes.some((n) => n.id === e.target))
     .map((e) => ({
       id: e.source + e.target,
@@ -64,15 +65,15 @@ export default function ExplorerPage() {
       style: {
         stroke: 'rgba(255, 255, 255, 0.20)', // --border-strong
         strokeWidth: 1.5,
-        strokeDasharray: e.kind === 'call' ? '5 5' : undefined,
+        strokeDasharray: e.type === 'calls' ? '5 5' : undefined,
       },
     }));
 
-  function renderTree(node: FileNode, depth = 0): React.ReactNode {
+  function renderTree(node: TreeNode, depth = 0): React.ReactNode {
     if (query && node.type === 'file' && !node.name.toLowerCase().includes(query.toLowerCase())) return null;
     return (
       <div key={node.path} style={{ paddingLeft: depth * 12 }}>
-        {node.type === 'dir' ? (
+        {node.type === 'folder' ? (
           <div className="text-xs font-mono font-medium text-text py-1 flex items-center gap-1.5">
             <Folder size={13} className="text-text-muted" />
             <span>{node.name}/</span>
@@ -90,7 +91,7 @@ export default function ExplorerPage() {
             <span className="truncate">{node.name}</span>
           </button>
         )}
-        {node.children?.map((c) => renderTree(c, depth + 1))}
+        {node.children.map((c) => renderTree(c, depth + 1))}
       </div>
     );
   }
@@ -107,17 +108,8 @@ export default function ExplorerPage() {
         />
         <div className="flex-1 overflow-auto">
           {treeQ.isLoading && <Loading />}
-          {treeQ.isError && (treeQ.error as any)?.status === 409 ? (
-            <div className="bg-warning/10 border border-warning rounded-[10px] p-3 text-xs text-text-muted font-sans">
-              Repo not indexed.{' '}
-              <a href="/repos" className="text-accent underline font-medium">
-                Go to Repos
-              </a>
-            </div>
-          ) : treeQ.isError ? (
-            <ErrorBanner message={(treeQ.error as Error).message} onRetry={() => treeQ.refetch()} />
-          ) : null}
-          {treeQ.data && renderTree(treeQ.data)}
+          {treeQ.isError && <ApiErrorView error={treeQ.error} onRetry={() => treeQ.refetch()} />}
+          {treeQ.data && renderTree(treeQ.data.root)}
         </div>
       </div>
 
@@ -155,16 +147,7 @@ export default function ExplorerPage() {
         </div>
 
         {graphQ.isLoading && <Loading />}
-        {graphQ.isError && (graphQ.error as any)?.status === 409 ? (
-          <div className="bg-warning/10 border border-warning rounded-[10px] p-3 text-xs text-text-muted font-sans">
-            Repo not indexed.{' '}
-            <a href="/repos" className="text-accent underline font-medium">
-              Go to Repos
-            </a>
-          </div>
-        ) : graphQ.isError ? (
-          <ErrorBanner message={(graphQ.error as Error).message} onRetry={() => graphQ.refetch()} />
-        ) : null}
+        {graphQ.isError && <ApiErrorView error={graphQ.error} onRetry={() => graphQ.refetch()} />}
 
         {/* Graph view container with --bg-deep background */}
         <div className="flex-1 bg-bg-deep rounded-[10px] border border-border overflow-hidden relative">
@@ -201,12 +184,14 @@ export default function ExplorerPage() {
         {selectedFile ? (
           fileQ.isLoading ? (
             <Loading />
+          ) : fileQ.isError ? (
+            <ApiErrorView error={fileQ.error} onRetry={() => fileQ.refetch()} />
           ) : fileQ.data ? (
             <div className="space-y-2">
               <div className="text-xs font-mono text-text-muted px-1 truncate">
                 {selectedFile}
               </div>
-              <CodeViewer code={fileQ.data.content} />
+              <CodeViewer code={fileQ.data.lines.join('\n')} language="python" startLine={fileQ.data.start} />
             </div>
           ) : null
         ) : (

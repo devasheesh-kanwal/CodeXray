@@ -1,15 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiFetch } from '../api/client';
+import { apiFetch, apiPost } from '../api/client';
 import { useRepo } from '../context/RepoContext';
-import { Loading, EmptyState, ErrorBanner } from '../components/shared/States';
+import { Loading, EmptyState, ErrorBanner, ApiErrorView } from '../components/shared/States';
 import { SeverityBadge, DesignBadge } from '../components/shared/Badges';
 import { Modal } from '../components/shared/Modal';
 import ReactDiffViewer from 'react-diff-viewer-continued';
-import type { Finding, PRReview, Rule } from '../api/types';
+import type { Finding, ReviewRequest, ReviewResponse, RulesResponse } from '../api/types';
 import { Copy } from 'lucide-react';
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 const darkDiffStyles = {
   variables: {
@@ -51,48 +50,41 @@ export default function PRReviewPage() {
   const [base, setBase] = useState('');
   const [head, setHead] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<unknown>(null);
   const [progress, setProgress] = useState<string | null>(null);
-  const [review, setReview] = useState<PRReview | null>(null);
+  const [review, setReview] = useState<ReviewResponse | null>(null);
   const [selected, setSelected] = useState<Finding | null>(null);
   const [sevFilter, setSevFilter] = useState<string>('all');
-  const [srcFilter, setSrcFilter] = useState<string>('all');
+  const [catFilter, setCatFilter] = useState<string>('all');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const rulesQ = useQuery({
-    queryKey: ['rules'],
-    queryFn: () => apiFetch<Rule[]>('/api/rules'),
-    enabled: rulesOpen,
-  });
-
-  const sampleMut = useMutation({
-    mutationFn: () => apiFetch<{ diff: string }>('/api/pr/sample'),
-    onSuccess: (d) => setDiff(d.diff),
+    queryKey: ['rules', selectedRepoId],
+    queryFn: () => apiFetch<RulesResponse>(`/api/repos/${selectedRepoId}/rules`),
+    enabled: rulesOpen && !!selectedRepoId,
   });
 
   const reviewMut = useMutation({
     mutationFn: async () => {
-      setProgress('Submitting…');
-      await new Promise((r) => setTimeout(r, 300));
-      setProgress('Analyzing diff…');
-      const body = mode === 'paste' ? { diff, repoId: selectedRepoId } : { base, head, repoId: selectedRepoId };
-      const res = await apiFetch<PRReview>('/api/pr/review', { method: 'POST', body: JSON.stringify(body) });
-      setProgress('Done');
-      return res;
+      setProgress('Reviewing diff…');
+      const body: ReviewRequest = mode === 'paste' ? { diff_text: diff } : { base_branch: base.trim(), head_branch: head.trim() };
+      return apiPost<ReviewResponse>(`/api/repos/${selectedRepoId}/review`, body);
     },
     onSuccess: (r) => {
       setReview(r);
       setProgress(null);
-      setError(null);
+      setApiError(null);
     },
-    onError: (e: any) => {
-      setError(e.message || 'Review failed');
+    onError: (e) => {
+      setApiError(e);
       setProgress(null);
     },
   });
 
   function submit() {
     setError(null);
+    setApiError(null);
     if (mode === 'paste' && !diff.trim()) {
       setError('Paste a diff');
       return;
@@ -107,8 +99,10 @@ export default function PRReviewPage() {
   const filtered = (review?.findings || []).filter(
     (f) =>
       (sevFilter === 'all' || f.severity === sevFilter) &&
-      (srcFilter === 'all' || f.source === srcFilter),
+      (catFilter === 'all' || f.category === catFilter),
   );
+
+  if (!selectedRepoId) return <EmptyState title="Select a repository" description="Choose a repo in the top bar." />;
 
   return (
     <div className="font-sans">
@@ -164,15 +158,6 @@ export default function PRReviewPage() {
         )}
 
         <div className="flex items-center gap-3">
-          {USE_MOCK && mode === 'paste' && (
-            <button
-              type="button"
-              onClick={() => sampleMut.mutate()}
-              className="px-4 py-2 rounded-full border border-border bg-bg-raised text-text-muted hover:text-text text-xs font-sans font-medium transition-colors cursor-pointer"
-            >
-              Load sample
-            </button>
-          )}
           <button
             type="button"
             onClick={submit}
@@ -185,6 +170,7 @@ export default function PRReviewPage() {
 
         {progress && <p className="text-xs font-mono text-text-muted mt-3">{progress}</p>}
         {error && <div className="mt-4"><ErrorBanner message={error} /></div>}
+        {!!apiError && <div className="mt-4"><ApiErrorView error={apiError} onRetry={submit} /></div>}
       </div>
 
       {review && (
@@ -215,16 +201,15 @@ export default function PRReviewPage() {
               <option value="low">Low</option>
             </select>
             <select
-              value={srcFilter}
-              onChange={(e) => setSrcFilter(e.target.value)}
+              value={catFilter}
+              onChange={(e) => setCatFilter(e.target.value)}
               className="h-9 px-3 rounded-[10px] border border-border bg-bg-raised text-text text-xs font-sans focus:outline-none focus:border-accent cursor-pointer"
             >
-              <option value="all">All sources</option>
-              <option value="design">Design</option>
-              <option value="security">Security</option>
-              <option value="performance">Performance</option>
-              <option value="style">Style</option>
+              <option value="all">All categories</option>
               <option value="bug">Bug</option>
+              <option value="security">Security</option>
+              <option value="practice">Practice</option>
+              <option value="design">Design</option>
             </select>
           </div>
 
@@ -236,7 +221,7 @@ export default function PRReviewPage() {
                   key={f.id}
                   onClick={() => setSelected(f)}
                   className={`bg-bg-surface border rounded-[14px] p-4 cursor-pointer transition-all ${
-                    f.breaks_design
+                    f.category === 'design'
                       ? 'border-warning/50 bg-warning/5'
                       : 'border-border hover:border-border-strong'
                   } ${
@@ -247,15 +232,13 @@ export default function PRReviewPage() {
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <SeverityBadge severity={f.severity} />
-                    {f.breaks_design && <DesignBadge />}
+                    {f.category === 'design' && <DesignBadge />}
                     <span className="text-sm font-sans font-medium text-text">{f.title}</span>
                   </div>
-                  <p className="text-xs text-text-muted mb-2 leading-relaxed">{f.description}</p>
-                  {f.file && (
-                    <p className="text-xs font-mono text-text-faint">
-                      {f.file}{f.line ? `:${f.line}` : ''}
-                    </p>
-                  )}
+                  <p className="text-xs text-text-muted mb-2 leading-relaxed">{f.explanation}</p>
+                  <p className="text-xs font-mono text-text-faint">
+                    {f.file}:{f.line} · {f.category} · {f.source} · {Math.round(f.confidence * 100)}%
+                  </p>
                   <div className="mt-2.5 flex items-center gap-2">
                     <code className="text-xs font-mono bg-bg-raised text-text border border-border px-2 py-1 rounded-[6px]">
                       {f.suggested_fix}
@@ -304,11 +287,12 @@ export default function PRReviewPage() {
       {/* Rules Modal */}
       <Modal open={rulesOpen} onClose={() => setRulesOpen(false)} title="Active Rules">
         {rulesQ.isLoading && <Loading />}
+        {rulesQ.isError && <ApiErrorView error={rulesQ.error} onRetry={() => rulesQ.refetch()} />}
         <div className="space-y-3 divide-y divide-border/60">
-          {rulesQ.data?.map((r) => (
+          {rulesQ.data?.rules.map((r) => (
             <div key={r.id} className="pt-3">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-text">{r.name}</span>
+                <span className="text-sm font-medium text-text">{r.title} <span className="text-xs font-mono text-text-faint">({r.severity})</span></span>
                 <span className={`text-xs font-mono uppercase ${r.enabled ? 'text-text' : 'text-text-faint'}`}>
                   {r.enabled ? 'enabled' : 'disabled'}
                 </span>

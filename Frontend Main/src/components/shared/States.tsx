@@ -1,3 +1,7 @@
+import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { ApiError } from '../../api/client';
+
 export function Loading({ label = 'Loading…' }: { label?: string }) {
   return (
     <div
@@ -42,7 +46,35 @@ export function EmptyState({ title, description }: { title: string; description?
   );
 }
 
-export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
+/**
+ * Themed view for any error thrown by the API client:
+ * backend down -> "Backend unreachable" + Retry; 409 not indexed -> link to Repos;
+ * 503 -> "AI providers are busy"; anything else -> the backend's error.message.
+ */
+export function ApiErrorView({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  if (!(error instanceof ApiError)) {
+    return <ErrorBanner message={(error as Error)?.message || 'Something went wrong'} onRetry={onRetry} />;
+  }
+  if (error.status === 0) return <ErrorBanner message="Backend unreachable" onRetry={onRetry} />;
+  if (error.status === 409 && error.details.stage) {
+    return (
+      <ErrorBanner message={error.message}>
+        <Link to="/repos" style={{ color: '#FF9E9E', fontSize: 13, textDecoration: 'underline', fontWeight: 600 }}>
+          Go to Repos
+        </Link>
+      </ErrorBanner>
+    );
+  }
+  if (error.status === 503) {
+    const tried = error.details.providers_tried ?? error.details.providers;
+    const suffix = Array.isArray(tried) && tried.length ? ` (tried: ${tried.join(', ')})` : '';
+    return <ErrorBanner message={`AI providers are busy, try again${suffix}`} onRetry={onRetry} />;
+  }
+  if (error.status === 501) return <ErrorBanner message={`Not available yet: ${error.message}`} />;
+  return <ErrorBanner message={error.message} onRetry={onRetry} />;
+}
+
+export function ErrorBanner({ message, onRetry, children }: { message: string; onRetry?: () => void; children?: ReactNode }) {
   return (
     <div
       style={{
@@ -58,6 +90,7 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
       }}
     >
       <span style={{ fontSize: 13, color: '#FF9E9E', fontFamily: 'Inter, sans-serif' }}>{message}</span>
+      {children}
       {onRetry && (
         <button
           onClick={onRetry}

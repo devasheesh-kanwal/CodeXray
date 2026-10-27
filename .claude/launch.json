@@ -12,6 +12,12 @@
       "runtimeExecutable": "Backend/.venv/Scripts/python.exe",
       "runtimeArgs": ["-c", "import os, uvicorn; os.environ['MOCK_MODE'] = 'false'; uvicorn.run('app.main:app', app_dir='Backend', port=8000)"],
       "port": 8000
+    },
+    {
+      "name": "codexray-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "Frontend Main", "run", "dev", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
     }
   ]
 }

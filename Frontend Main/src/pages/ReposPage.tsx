@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '../api/client';
+import { apiFetch, apiPost } from '../api/client';
 import { useRepo } from '../context/RepoContext';
-import { Loading, ErrorBanner } from '../components/shared/States';
-import type { Repo, IndexStatus } from '../api/types';
+import { Loading, ApiErrorView } from '../components/shared/States';
+import type { Repo, IndexStatus, AddRepoRequest, AddRepoResponse } from '../api/types';
 import { ArrowRight, Check, FolderGit2 } from 'lucide-react';
 
-const STAGES = ['cloning', 'parsing', 'graph', 'embedding', 'summaries', 'ready'] as const;
+// Stage order from docs/API.md. cloning only runs for git URLs, summaries only when enabled.
+const STAGES = ['queued', 'cloning', 'parsing', 'graph', 'bm25', 'embedding', 'summaries', 'ready'] as const;
 
 export default function ReposPage() {
   const qc = useQueryClient();
@@ -15,16 +16,18 @@ export default function ReposPage() {
   const [gitUrl, setGitUrl] = useState('');
   const [localPath, setLocalPath] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [addError, setAddError] = useState<unknown>(null);
 
   const addMut = useMutation({
-    mutationFn: (body: any) => apiFetch<Repo>('/api/repos', { method: 'POST', body: JSON.stringify(body) }),
+    mutationFn: (body: AddRepoRequest) => apiPost<AddRepoResponse>('/api/repos', body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['repos'] });
       setError(null);
+      setAddError(null);
       setGitUrl('');
       setLocalPath('');
     },
-    onError: (e: any) => setError(e.message || 'Failed to add repo'),
+    onError: (e) => setAddError(e),
   });
 
   function submit() {
@@ -33,18 +36,18 @@ export default function ReposPage() {
         setError('Git URL required');
         return;
       }
-      addMut.mutate({ url: gitUrl.trim() });
+      addMut.mutate({ git_url: gitUrl.trim() });
     } else {
       if (!localPath.trim()) {
         setError('Local path required');
         return;
       }
-      addMut.mutate({ localPath: localPath.trim() });
+      addMut.mutate({ local_path: localPath.trim() });
     }
   }
 
   if (reposQ.isLoading) return <Loading />;
-  if (reposQ.isError) return <ErrorBanner message={(reposQ.error as Error).message} onRetry={() => reposQ.refetch()} />;
+  if (reposQ.isError) return <ApiErrorView error={reposQ.error} onRetry={() => reposQ.refetch()} />;
 
   return (
     <div className="font-sans">
@@ -111,6 +114,7 @@ export default function ReposPage() {
         {error && (
           <p className="text-accent text-xs font-sans mb-3">{error}</p>
         )}
+        {!!addError && <ApiErrorView error={addError} />}
 
         {/* Submit button */}
         <button
@@ -149,7 +153,7 @@ export default function ReposPage() {
       {/* Repos List */}
       <div className="space-y-4">
         {reposQ.data?.map((r) => (
-          <RepoCard key={r.id} repo={r} />
+          <RepoCard key={r.repo_id} repo={r} />
         ))}
       </div>
     </div>
@@ -158,27 +162,30 @@ export default function ReposPage() {
 
 function RepoCard({ repo }: { repo: Repo }) {
   const { selectedRepoId, setSelectedRepoId, setSelectedRepo } = useRepo();
-  const isSelected = selectedRepoId === repo.id;
+  const isSelected = selectedRepoId === repo.repo_id;
 
   const statusQ = useQuery({
-    queryKey: ['repo-status', repo.id],
-    queryFn: () => apiFetch<IndexStatus>(`/api/repos/${repo.id}/status`),
-    refetchInterval: repo.status !== 'ready' && repo.status !== 'error' ? 1000 : false,
+    queryKey: ['repo-status', repo.repo_id],
+    queryFn: () => apiFetch<IndexStatus>(`/api/repos/${repo.repo_id}/status`),
+    // Poll every 1.5 s until indexing finishes, based on the latest status.
+    refetchInterval: (q) => {
+      const s = q.state.data?.stage ?? repo.status;
+      return s === 'ready' || s === 'failed' ? false : 1500;
+    },
   });
 
   const stage = statusQ.data?.stage || repo.status;
-  const idx = STAGES.indexOf(stage as any);
-  const isIndexing = stage !== 'ready' && stage !== 'error';
+  const idx = STAGES.indexOf(stage as (typeof STAGES)[number]);
+  const failed = stage === 'failed';
+  const isIndexing = stage !== 'ready' && !failed;
 
-  // Files progress calculation for indexing state
-  const rawProgress = statusQ.data?.progress ?? (idx >= 0 ? Math.round(((idx + 1) / STAGES.length) * 100) : 40);
-  const filesTotal = (statusQ.data as any)?.files_total ?? (statusQ.data as any)?.totalFiles ?? repo.totalFiles ?? 48;
-  const filesDone = (statusQ.data as any)?.files_done ?? (statusQ.data as any)?.filesDone ?? repo.filesDone ?? Math.min(filesTotal, Math.round((rawProgress / 100) * filesTotal));
+  const filesTotal = statusQ.data?.files_total ?? repo.files_total;
+  const filesDone = statusQ.data?.files_done ?? 0;
 
   return (
     <div
       onClick={() => {
-        setSelectedRepoId(repo.id);
+        setSelectedRepoId(repo.repo_id);
         setSelectedRepo(repo);
       }}
       className={`bg-bg-surface border rounded-[14px] p-[28px] transition-all cursor-pointer relative ${
@@ -194,7 +201,8 @@ function RepoCard({ repo }: { repo: Repo }) {
             {repo.name}
           </h2>
           <span className="font-mono text-xs text-text-faint">
-            {repo.url || repo.localPath}
+            {repo.repo_id} · {repo.files_total} files
+            {statusQ.data?.search_mode && ` · search: ${statusQ.data.search_mode}`}
           </span>
         </div>
 
@@ -203,6 +211,10 @@ function RepoCard({ repo }: { repo: Repo }) {
           {stage === 'ready' ? (
             <span className="border border-text text-text text-[11px] tracking-widest font-sans font-semibold px-2.5 py-0.5 rounded-full uppercase">
               READY
+            </span>
+          ) : failed ? (
+            <span className="bg-accent text-white text-[11px] tracking-widest font-sans font-semibold px-2.5 py-0.5 rounded-full uppercase">
+              FAILED
             </span>
           ) : (
             <span className="border border-accent text-accent text-[11px] tracking-widest font-sans font-semibold px-2.5 py-0.5 rounded-full uppercase animate-pulse">
@@ -253,6 +265,10 @@ function RepoCard({ repo }: { repo: Repo }) {
         })}
       </div>
 
+      {failed && (
+        <p className="mt-4 text-xs font-mono text-accent">{statusQ.data?.error || 'Indexing failed.'}</p>
+      )}
+
       {/* Indexing card progress: files_done / files_total with thin red progress bar */}
       {isIndexing && (
         <div className="mt-5 pt-4 border-t border-border flex flex-col gap-1.5">
@@ -263,7 +279,7 @@ function RepoCard({ repo }: { repo: Repo }) {
           <div className="w-full h-1 bg-bg-raised rounded-full overflow-hidden">
             <div
               className="h-full bg-accent transition-all duration-300"
-              style={{ width: `${Math.min(100, Math.round((filesDone / filesTotal) * 100))}%` }}
+              style={{ width: `${filesTotal ? Math.min(100, Math.round((filesDone / filesTotal) * 100)) : 0}%` }}
             />
           </div>
         </div>

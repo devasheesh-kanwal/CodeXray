@@ -400,7 +400,8 @@ Response:
 - Every citation is verified by the backend: the file is indexed, the lines
   exist, and the range overlaps code the Explainer was given. Markers that fail
   this check are removed from `answer`, and every kept marker is written as
-  `[file:start-end]` (a model's `` `file:5` `` or `[file:5]` becomes `[file:5-5]`).
+  `[file:start-end]` (a model's `` `file:5` `` or `[file:5]` becomes `[file:5-5]`, and a
+  grouped `[a.py:1-2, b.py:5]` becomes `[a.py:1-2] [b.py:5-5]`, each checked on its own).
 - `not_found: true` means no relevant code was found. `answer` is then exactly
   `"No relevant code found for this question"`, `citations` is empty and
   `confidence` is 0.

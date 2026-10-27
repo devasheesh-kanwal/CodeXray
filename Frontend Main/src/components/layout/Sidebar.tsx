@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { Database, FolderTree, MessageSquare, GitPullRequest, Wrench, Activity } from 'lucide-react';
 import Logo from '../ui/Logo';
+import { USE_MOCK } from '../../api/client';
 
 const items = [
   { to: '/repos',    label: 'Repos',         icon: Database },
@@ -79,7 +80,7 @@ export default function Sidebar() {
           color: 'rgba(143,168,160,.45)',
         }}
       >
-        v0.1 · mock
+        v0.1 · {USE_MOCK ? 'mock' : 'live'}
       </div>
     </aside>
   );
