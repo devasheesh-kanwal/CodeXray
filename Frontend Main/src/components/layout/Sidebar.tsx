@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { Database, FolderTree, MessageSquare, GitPullRequest, Wrench, Activity } from 'lucide-react';
 import { USE_MOCK } from '../../api/client';
+import Logo from '../ui/Logo';
 
 const items = [
   { to: '/repos',     label: 'Repos',         icon: Database },
@@ -26,6 +27,10 @@ export default function Sidebar() {
         borderTop: 'none',
         borderBottom: 'none',
         borderLeft: 'none',
+        // light blur so the spider webs behind stay visible
+        background: 'rgba(255,255,255,.025)',
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
       }}
     >
       {/* Logo */}
@@ -39,22 +44,7 @@ export default function Sidebar() {
           flexShrink: 0,
         }}
       >
-        <a
-          href="/"
-          style={{
-            fontFamily: '"Bodoni Moda", Georgia, serif',
-            fontWeight: 700,
-            fontSize: 22,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: '#DFF5EB',
-            textDecoration: 'none',
-          }}
-        >
-          Code
-          <span style={{ color: '#DC1F1F' }}>X</span>
-          ray
-        </a>
+        <Logo size="sm" href="/" />
       </div>
 
       {/* Nav links */}

@@ -16,7 +16,7 @@ export default function Shell({ children }: { children?: React.ReactNode }) {
   return (
     <RepoProvider>
       <div className="app-shell" style={{ display: 'flex', height: '100vh', position: 'relative', overflow: 'hidden' }}>
-        {/* Living sunset background — mounted once, z-index 0 */}
+        {/* Spider-web background — mounted once, z-index 0 */}
         <AppBackground visible={true} />
 
         {/* Sidebar — z-index 10 above background */}
