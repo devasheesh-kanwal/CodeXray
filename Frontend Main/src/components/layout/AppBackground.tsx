@@ -1,5 +1,47 @@
 import { VIEWBOX, ASPECT, WEBS, STRANDS } from './spiderWeb';
 
+/** How strong the web threads are drawn (multiplies each web's own opacity). */
+const WEB_STRENGTH = 1.6;
+
+/** The spider-web threads (shapes come from spiderWeb.ts). */
+function WebLines({ id, style }: { id: string; style: React.CSSProperties }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox={VIEWBOX}
+      preserveAspectRatio={ASPECT}
+      style={{ width: '100%', height: '100%', pointerEvents: 'none', ...style }}
+    >
+      <defs>
+        <radialGradient id={`web-fade-${id}`} cx="1420" cy="200" r="560" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#E8E8EC" stopOpacity="1" />
+          <stop offset="1" stopColor="#E8E8EC" stopOpacity="0.4" />
+        </radialGradient>
+      </defs>
+      <g fill="none" stroke="#E2E2E6" strokeLinecap="round">
+        {WEBS.map((w, i) => (
+          <g key={i} opacity={Math.min(1, w.opacity * WEB_STRENGTH)} stroke={i === 0 ? `url(#web-fade-${id})` : undefined}>
+            <path d={w.spokes} strokeWidth={1.1} />
+            <path d={w.rings} strokeWidth={0.9} />
+          </g>
+        ))}
+        <g opacity={0.12 * WEB_STRENGTH} strokeWidth={0.9}>
+          {STRANDS.map((d) => <path key={d} d={d} />)}
+        </g>
+      </g>
+    </svg>
+  );
+}
+
+/**
+ * The same web drawn again above the page content, faintly, so the threads also show
+ * across the glass cards and buttons (whose frosted blur hides the background copy).
+ * It never takes clicks.
+ */
+export function WebOverlay() {
+  return <WebLines id="over" style={{ position: 'fixed', inset: 0, zIndex: 20, opacity: 0.28 }} />;
+}
+
 /**
  * AppBackground
  * Fixed, full-viewport background for the app shell (not the landing page or the loader).
@@ -37,29 +79,7 @@ export default function AppBackground({ visible }: { visible: boolean }) {
       />
 
       {/* ── Layer 2: Webs ── */}
-      <svg
-        viewBox={VIEWBOX}
-        preserveAspectRatio={ASPECT}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
-      >
-        <defs>
-          <radialGradient id="web-fade-0" cx="1420" cy="200" r="560" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#E8E8EC" stopOpacity="1" />
-            <stop offset="1" stopColor="#E8E8EC" stopOpacity="0.25" />
-          </radialGradient>
-        </defs>
-        <g fill="none" stroke="#E2E2E6" strokeLinecap="round">
-          {WEBS.map((w, i) => (
-            <g key={i} opacity={w.opacity} stroke={i === 0 ? 'url(#web-fade-0)' : undefined}>
-              <path d={w.spokes} strokeWidth={1} />
-              <path d={w.rings} strokeWidth={0.8} />
-            </g>
-          ))}
-          <g opacity={0.12} strokeWidth={0.8}>
-            {STRANDS.map((d) => <path key={d} d={d} />)}
-          </g>
-        </g>
-      </svg>
+      <WebLines id="bg" style={{ position: 'absolute', inset: 0 }} />
 
       {/* ── Layer 3: Vignette ── */}
       <div
