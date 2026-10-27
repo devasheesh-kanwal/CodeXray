@@ -4,7 +4,7 @@ import { apiFetch } from '../../api/client';
 import type { Health } from '../../api/types';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import AppBackground from './AppBackground';
+import AppBackground, { WebOverlay } from './AppBackground';
 import { RepoProvider } from '../../context/RepoContext';
 import { ApiErrorView } from '../../components/shared/States';
 
@@ -46,6 +46,9 @@ export default function Shell({ children }: { children?: React.ReactNode }) {
             </div>
           </main>
         </div>
+
+        {/* the web again, faintly, on top of the cards and buttons (ignores clicks) */}
+        <WebOverlay />
       </div>
     </RepoProvider>
   );
