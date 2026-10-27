@@ -8,8 +8,13 @@ export default function NotFoundPage() {
       <div className="mb-6">
         <Logo size="lg" href="/" />
       </div>
-      <h1 className="text-h1 mb-2 font-display text-text font-normal">404</h1>
-      <p className="text-body-sm text-text-muted mb-6 font-sans">Page not found.</p>
+      <h1
+        className="page-title mb-2 text-text font-extrabold"
+        style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', letterSpacing: '-0.02em' }}
+      >
+        <span className="page-title-accent">404</span>
+      </h1>
+      <p className="text-sm text-text-muted mb-6 font-sans">Page not found.</p>
       <button
         type="button"
         onClick={() => navigate('/repos')}

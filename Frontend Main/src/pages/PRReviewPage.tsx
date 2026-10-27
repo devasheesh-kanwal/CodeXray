@@ -14,27 +14,27 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const darkDiffStyles = {
   variables: {
     dark: {
-      diffViewerBackground: '#000000',
-      diffViewerColor: '#CFF1E6',
-      addedBackground: 'rgba(207, 241, 230, 0.12)',
-      addedColor: '#CFF1E6',
-      removedBackground: 'rgba(220, 31, 31, 0.16)',
-      removedColor: '#FF8E8E',
-      wordAddedBackground: 'rgba(207, 241, 230, 0.25)',
+      diffViewerBackground: '#0B0B0E',
+      diffViewerColor: '#DFF5EB',
+      addedBackground: 'rgba(48, 164, 108, 0.15)',
+      addedColor: '#DFF5EB',
+      removedBackground: 'rgba(220, 31, 31, 0.18)',
+      removedColor: '#FF9E9E',
+      wordAddedBackground: 'rgba(48, 164, 108, 0.28)',
       wordRemovedBackground: 'rgba(220, 31, 31, 0.35)',
-      addedGutterBackground: '#0A0A0A',
-      removedGutterBackground: '#0A0A0A',
-      gutterBackground: '#0A0A0A',
-      gutterBackgroundDark: '#050505',
+      addedGutterBackground: '#0E0E12',
+      removedGutterBackground: '#0E0E12',
+      gutterBackground: '#0E0E12',
+      gutterBackgroundDark: '#08080A',
       highlightBackground: 'rgba(220, 31, 31, 0.14)',
       highlightGutterBackground: 'rgba(220, 31, 31, 0.20)',
-      codeFoldGutterBackground: '#0A0A0A',
-      codeFoldBackground: '#0A0A0A',
-      emptyLineBackground: '#000000',
-      gutterColor: 'rgba(207, 241, 230, 0.38)',
-      addedGutterColor: '#CFF1E6',
+      codeFoldGutterBackground: '#0E0E12',
+      codeFoldBackground: '#0E0E12',
+      emptyLineBackground: '#0B0B0E',
+      gutterColor: 'rgba(143, 168, 160, 0.45)',
+      addedGutterColor: '#DFF5EB',
       removedGutterColor: '#DC1F1F',
-      codeFoldContentColor: 'rgba(207, 241, 230, 0.62)',
+      codeFoldContentColor: 'rgba(143, 168, 160, 0.65)',
     },
   },
   line: {
@@ -112,28 +112,61 @@ export default function PRReviewPage() {
 
   return (
     <div className="font-sans">
-      <h1 className="font-display font-semibold text-3xl text-text mb-6 tracking-wide">
-        PR Review
-      </h1>
+      {/* Page title */}
+      <div style={{ marginBottom: 28 }}>
+        <h1 className="page-title" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '0 12px' }}>
+          <span className="page-title-accent">REVIEW</span>
+          <span>pull requests</span>
+        </h1>
+        <div style={{ width: 40, height: 1, background: 'rgba(255,255,255,.12)', margin: '14px 0' }} />
+        <p style={{ color: '#8FA8A0', fontSize: 13 }}>Automated diff inspection, architectural rules, and security compliance</p>
+      </div>
 
       {/* Input / Config Box */}
-      <div className="bg-bg-surface border border-border rounded-[14px] p-6 mb-6">
-        <div className="bg-bg-raised p-1 rounded-full inline-flex border border-border mb-4">
+      <div className="glass glass-card rounded-[16px] p-6 mb-6" style={{ borderRadius: 16 }}>
+        <div
+          style={{
+            background: 'rgba(255,255,255,.06)',
+            border: '1px solid rgba(255,255,255,.10)',
+            borderRadius: 999,
+            display: 'inline-flex',
+            padding: 3,
+            marginBottom: 16,
+          }}
+        >
           <button
             type="button"
             onClick={() => setMode('paste')}
-            className={`px-4 py-1.5 rounded-full text-xs font-sans font-medium transition-colors cursor-pointer ${
-              mode === 'paste' ? 'bg-accent text-white' : 'text-text-muted hover:text-text'
-            }`}
+            style={{
+              padding: '6px 16px',
+              borderRadius: 999,
+              fontSize: 12,
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer',
+              background: mode === 'paste' ? 'var(--accent, #DC1F1F)' : 'transparent',
+              color: mode === 'paste' ? '#fff' : 'var(--text-muted, #8FA8A0)',
+              transition: 'all 0.15s',
+            }}
           >
             Paste diff
           </button>
           <button
             type="button"
             onClick={() => setMode('branches')}
-            className={`px-4 py-1.5 rounded-full text-xs font-sans font-medium transition-colors cursor-pointer ${
-              mode === 'branches' ? 'bg-accent text-white' : 'text-text-muted hover:text-text'
-            }`}
+            style={{
+              padding: '6px 16px',
+              borderRadius: 999,
+              fontSize: 12,
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer',
+              background: mode === 'branches' ? 'var(--accent, #DC1F1F)' : 'transparent',
+              color: mode === 'branches' ? '#fff' : 'var(--text-muted, #8FA8A0)',
+              transition: 'all 0.15s',
+            }}
           >
             Compare branches
           </button>
@@ -144,7 +177,19 @@ export default function PRReviewPage() {
             value={diff}
             onChange={(e) => setDiff(e.target.value)}
             placeholder="Paste unified diff…"
-            className="w-full h-40 p-3.5 rounded-[10px] border border-border bg-bg-raised text-mono text-xs text-text placeholder:text-text-faint mb-4 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent-soft"
+            style={{
+              width: '100%',
+              height: 160,
+              padding: 14,
+              borderRadius: 10,
+              border: '1px solid rgba(255,255,255,.12)',
+              background: 'rgba(255,255,255,.07)',
+              color: '#DFF5EB',
+              fontSize: 12,
+              fontFamily: 'JetBrains Mono, monospace',
+              outline: 'none',
+              marginBottom: 16,
+            }}
           />
         ) : (
           <div className="grid grid-cols-2 gap-3 mb-4">
@@ -152,13 +197,33 @@ export default function PRReviewPage() {
               value={base}
               onChange={(e) => setBase(e.target.value)}
               placeholder="base branch (e.g. main)"
-              className="h-10 px-3 rounded-[10px] border border-border bg-bg-raised text-text placeholder:text-text-faint text-xs font-mono focus:outline-none focus:border-accent"
+              style={{
+                height: 40,
+                padding: '0 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,.12)',
+                background: 'rgba(255,255,255,.07)',
+                color: '#DFF5EB',
+                fontSize: 12,
+                fontFamily: 'JetBrains Mono, monospace',
+                outline: 'none',
+              }}
             />
             <input
               value={head}
               onChange={(e) => setHead(e.target.value)}
               placeholder="head branch (e.g. feat/repair)"
-              className="h-10 px-3 rounded-[10px] border border-border bg-bg-raised text-text placeholder:text-text-faint text-xs font-mono focus:outline-none focus:border-accent"
+              style={{
+                height: 40,
+                padding: '0 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,.12)',
+                background: 'rgba(255,255,255,.07)',
+                color: '#DFF5EB',
+                fontSize: 12,
+                fontFamily: 'JetBrains Mono, monospace',
+                outline: 'none',
+              }}
             />
           </div>
         )}
@@ -168,7 +233,17 @@ export default function PRReviewPage() {
             <button
               type="button"
               onClick={() => sampleMut.mutate()}
-              className="px-4 py-2 rounded-full border border-border bg-bg-raised text-text-muted hover:text-text text-xs font-sans font-medium transition-colors cursor-pointer"
+              style={{
+                padding: '8px 18px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,.12)',
+                background: 'rgba(255,255,255,.07)',
+                color: 'var(--text-muted, #8FA8A0)',
+                fontSize: 12,
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
             >
               Load sample
             </button>
@@ -177,7 +252,20 @@ export default function PRReviewPage() {
             type="button"
             onClick={submit}
             disabled={reviewMut.isPending}
-            className="px-6 py-2 rounded-full bg-accent hover:bg-accent-hover text-white text-xs font-sans font-semibold tracking-wider uppercase transition-colors disabled:opacity-40 cursor-pointer"
+            style={{
+              padding: '8px 24px',
+              borderRadius: 999,
+              background: 'var(--accent, #DC1F1F)',
+              color: '#fff',
+              fontSize: 12,
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 600,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              border: 'none',
+              cursor: 'pointer',
+              opacity: reviewMut.isPending ? 0.5 : 1,
+            }}
           >
             {reviewMut.isPending ? 'Reviewing…' : 'Review'}
           </button>
@@ -190,12 +278,22 @@ export default function PRReviewPage() {
       {review && (
         <div>
           {/* Summary bar */}
-          <div className="bg-bg-surface border border-border rounded-[14px] p-4 mb-4 flex items-center justify-between">
+          <div className="glass rounded-[14px] p-4 mb-4 flex items-center justify-between" style={{ borderRadius: 14 }}>
             <span className="text-sm font-sans text-text font-medium">{review.summary}</span>
             <button
               type="button"
               onClick={() => setRulesOpen(true)}
-              className="px-4 py-1.5 rounded-full border border-border bg-bg-raised text-text hover:border-border-strong hover:text-white text-xs font-sans font-medium transition-colors cursor-pointer"
+              style={{
+                padding: '6px 16px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,.12)',
+                background: 'rgba(255,255,255,.07)',
+                color: 'var(--text, #DFF5EB)',
+                fontSize: 12,
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
             >
               Rules
             </button>
@@ -206,7 +304,18 @@ export default function PRReviewPage() {
             <select
               value={sevFilter}
               onChange={(e) => setSevFilter(e.target.value)}
-              className="h-9 px-3 rounded-[10px] border border-border bg-bg-raised text-text text-xs font-sans focus:outline-none focus:border-accent cursor-pointer"
+              style={{
+                height: 36,
+                padding: '0 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,.12)',
+                background: '#17181B',
+                color: '#DFF5EB',
+                fontSize: 12,
+                fontFamily: 'Inter, sans-serif',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
             >
               <option value="all">All severities</option>
               <option value="critical">Critical</option>
@@ -217,7 +326,18 @@ export default function PRReviewPage() {
             <select
               value={srcFilter}
               onChange={(e) => setSrcFilter(e.target.value)}
-              className="h-9 px-3 rounded-[10px] border border-border bg-bg-raised text-text text-xs font-sans focus:outline-none focus:border-accent cursor-pointer"
+              style={{
+                height: 36,
+                padding: '0 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,.12)',
+                background: '#17181B',
+                color: '#DFF5EB',
+                fontSize: 12,
+                fontFamily: 'Inter, sans-serif',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
             >
               <option value="all">All sources</option>
               <option value="design">Design</option>
@@ -231,56 +351,58 @@ export default function PRReviewPage() {
           <div className="grid grid-cols-2 gap-6">
             {/* Findings list */}
             <div className="space-y-3">
-              {filtered.map((f) => (
-                <div
-                  key={f.id}
-                  onClick={() => setSelected(f)}
-                  className={`bg-bg-surface border rounded-[14px] p-4 cursor-pointer transition-all ${
-                    f.breaks_design
-                      ? 'border-warning/50 bg-warning/5'
-                      : 'border-border hover:border-border-strong'
-                  } ${
-                    selected?.id === f.id
-                      ? 'ring-1 ring-accent border-accent shadow-[0_0_16px_rgba(220,31,31,0.12)]'
-                      : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <SeverityBadge severity={f.severity} />
-                    {f.breaks_design && <DesignBadge />}
-                    <span className="text-sm font-sans font-medium text-text">{f.title}</span>
+              {filtered.map((f) => {
+                const isSel = selected?.id === f.id;
+                return (
+                  <div
+                    key={f.id}
+                    onClick={() => setSelected(f)}
+                    className={`glass glass-card rounded-[14px] p-4 cursor-pointer transition-all ${
+                      isSel ? 'glass-selected ring-1 ring-accent' : ''
+                    }`}
+                    style={{
+                      borderRadius: 14,
+                      borderColor: isSel ? 'var(--accent, #DC1F1F)' : undefined,
+                      boxShadow: isSel ? '0 0 20px rgba(217,160,102,0.22), var(--glass-highlight)' : undefined,
+                    }}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <SeverityBadge severity={f.severity} />
+                      {f.breaks_design && <DesignBadge />}
+                      <span className="card-title text-sm text-text font-semibold">{f.title}</span>
+                    </div>
+                    <p className="text-xs text-text-muted mb-2 leading-relaxed">{f.description}</p>
+                    {f.file && (
+                      <p className="text-xs font-mono text-text-faint">
+                        {f.file}{f.line ? `:${f.line}` : ''}
+                      </p>
+                    )}
+                    <div className="mt-2.5 flex items-center gap-2">
+                      <code className="text-xs font-mono bg-white/5 text-text border border-white/10 px-2 py-1 rounded-[6px]">
+                        {f.suggested_fix}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(f.suggested_fix);
+                          setCopiedId(f.id);
+                          setTimeout(() => setCopiedId(null), 1500);
+                        }}
+                        className="text-xs font-sans text-text-muted hover:text-text inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy size={11} />
+                        <span>{copiedId === f.id ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-xs text-text-muted mb-2 leading-relaxed">{f.description}</p>
-                  {f.file && (
-                    <p className="text-xs font-mono text-text-faint">
-                      {f.file}{f.line ? `:${f.line}` : ''}
-                    </p>
-                  )}
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <code className="text-xs font-mono bg-bg-raised text-text border border-border px-2 py-1 rounded-[6px]">
-                      {f.suggested_fix}
-                    </code>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigator.clipboard.writeText(f.suggested_fix);
-                        setCopiedId(f.id);
-                        setTimeout(() => setCopiedId(null), 1500);
-                      }}
-                      className="text-xs font-sans text-text-muted hover:text-text inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      <Copy size={11} />
-                      <span>{copiedId === f.id ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {filtered.length === 0 && <EmptyState title="No findings" description="Diff looks clean under current filters." />}
             </div>
 
             {/* Diff Viewer panel */}
-            <div className="bg-bg-deep border border-border rounded-[14px] overflow-auto max-h-[640px]">
+            <div className="glass-dense rounded-[14px] overflow-auto max-h-[640px]" style={{ borderRadius: 14 }}>
               {selected ? (
                 <ReactDiffViewer
                   oldValue={diff || ''}
@@ -308,7 +430,7 @@ export default function PRReviewPage() {
           {rulesQ.data?.map((r) => (
             <div key={r.id} className="pt-3">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-text">{r.name}</span>
+                <span className="card-title text-sm font-semibold text-text">{r.name}</span>
                 <span className={`text-xs font-mono uppercase ${r.enabled ? 'text-text' : 'text-text-faint'}`}>
                   {r.enabled ? 'enabled' : 'disabled'}
                 </span>

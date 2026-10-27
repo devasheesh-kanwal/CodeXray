@@ -1,16 +1,21 @@
 export type Repo = {
   id: string;
+  repo_id?: string;
   name: string;
   url?: string;
   localPath?: string;
-  status: 'cloning' | 'parsing' | 'graph' | 'embedding' | 'summaries' | 'ready' | 'error';
+  local_path?: string;
+  status: 'cloning' | 'parsing' | 'graph' | 'embedding' | 'summaries' | 'ready' | 'error' | 'failed' | 'queued' | 'bm25';
   filesDone?: number;
   totalFiles?: number;
-  createdAt: string;
+  files_done?: number;
+  files_total?: number;
+  createdAt?: string;
 };
 
+
 export type IndexStatus = {
-  stage: 'cloning' | 'parsing' | 'graph' | 'embedding' | 'summaries' | 'ready' | 'error';
+  stage: 'cloning' | 'parsing' | 'graph' | 'embedding' | 'summaries' | 'ready' | 'error' | 'failed' | 'queued' | 'bm25';
   message?: string;
   progress?: number;
   filesDone?: number;

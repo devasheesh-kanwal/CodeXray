@@ -84,12 +84,18 @@ export default function RepairPage() {
 
   return (
     <div className="font-sans">
-      <h1 className="font-display font-semibold text-3xl text-text mb-6 tracking-wide">
-        Repair
-      </h1>
+      {/* Page title */}
+      <div style={{ marginBottom: 28 }}>
+        <h1 className="page-title" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '0 12px' }}>
+          <span className="page-title-accent">REPAIR</span>
+          <span>automated fixes</span>
+        </h1>
+        <div style={{ width: 40, height: 1, background: 'rgba(255,255,255,.12)', margin: '14px 0' }} />
+        <p style={{ color: '#8FA8A0', fontSize: 13 }}>Run multi-agent automated repair loops on temporary branches</p>
+      </div>
 
       {!runId && (
-        <div className="bg-bg-surface border border-border rounded-[14px] p-6 mb-6">
+        <div className="glass glass-card rounded-[16px] p-6 mb-6" style={{ borderRadius: 16 }}>
           <p className="text-sm text-text-muted mb-4 font-sans leading-relaxed">
             Start an automated repair run on a safe temporary branch for the selected repository.
           </p>
@@ -113,7 +119,7 @@ export default function RepairPage() {
         <div>
           <div className="flex items-center gap-3 mb-4">
             {run?.replay && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-warning/15 border border-warning text-warning">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-[rgba(217,160,102,.15)] border border-[rgba(217,160,102,.4)] text-[#D9A066]">
                 Replay
               </span>
             )}
@@ -130,12 +136,13 @@ export default function RepairPage() {
               return (
                 <div
                   key={e.id}
-                  className={`border rounded-[10px] p-3.5 transition-colors ${
-                    failed ? 'border-accent/40 bg-accent-soft' : 'border-border bg-bg-surface'
+                  className={`glass rounded-[12px] p-3.5 transition-colors ${
+                    failed ? 'border-accent/40 bg-accent-soft' : ''
                   }`}
+                  style={{ borderRadius: 12 }}
                 >
                   <div className="flex items-center gap-3 flex-wrap">
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-bg-raised border border-border text-text">
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-white/5 border border-white/10 text-text">
                       {e.agent === 'plain' ? 'runner' : e.agent || 'system'}
                     </span>
                     <span className="text-sm font-medium text-text">{e.state}</span>
@@ -146,7 +153,7 @@ export default function RepairPage() {
                           ? 'border border-text/40 text-text'
                           : failed
                           ? 'bg-accent text-white'
-                          : 'border border-border text-text-faint'
+                          : 'border border-white/10 text-text-faint'
                       }`}
                     >
                       {e.status}
@@ -159,22 +166,25 @@ export default function RepairPage() {
 
           {/* Awaiting Approval */}
           {status === 'awaiting_approval' && awaiting && (
-            <div className="bg-bg-surface border-2 border-warning/70 rounded-[14px] p-6 mb-6 shadow-xl">
-              <h2 className="font-display font-semibold text-2xl text-text mb-3">
+            <div
+              className="glass-strong border-2 border-[rgba(217,160,102,.7)] rounded-[16px] p-6 mb-6 shadow-2xl"
+              style={{ borderRadius: 16 }}
+            >
+              <h2 className="card-title text-2xl text-text mb-3 tracking-tight">
                 Awaiting approval
               </h2>
               <div className="mb-4">
-                <h4 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-1.5">
+                <span className="section-label mb-1.5 block">
                   Proposed Diff
-                </h4>
-                <pre className="bg-bg-deep border border-border p-4 rounded-[10px] text-mono text-xs text-text overflow-auto">
+                </span>
+                <pre className="glass-dense p-4 rounded-[10px] text-mono text-xs text-text overflow-auto">
                   {awaiting.diff}
                 </pre>
               </div>
               <div className="mb-4">
-                <h4 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-1.5">
+                <span className="section-label mb-1.5 block">
                   Evaluation Checklist
-                </h4>
+                </span>
                 <ul className="space-y-1.5">
                   {awaiting.eval?.map((ev, i) => (
                     <li key={i} className="text-xs font-mono flex items-center gap-2">
@@ -188,7 +198,7 @@ export default function RepairPage() {
                   ))}
                 </ul>
               </div>
-              <div className="mb-5 bg-bg-raised border border-border rounded-[10px] p-3.5">
+              <div className="mb-5 glass rounded-[10px] p-3.5" style={{ borderRadius: 10 }}>
                 <p className="text-sm text-text-muted">{awaiting.reviewerOpinion}</p>
                 <p className="text-xs font-mono text-text-faint mt-1">does not override tests</p>
               </div>
@@ -213,16 +223,16 @@ export default function RepairPage() {
 
           {/* Merged */}
           {status === 'merged' && (
-            <div className="bg-bg-surface border border-text/40 rounded-[14px] p-6 mb-6">
-              <h2 className="font-display font-semibold text-2xl text-text mb-1">Merged</h2>
+            <div className="glass rounded-[16px] p-6 mb-6" style={{ borderRadius: 16 }}>
+              <h2 className="card-title text-2xl text-text mb-1 tracking-tight">Merged</h2>
               <p className="text-sm text-text-muted">Not pushed — local branch only.</p>
             </div>
           )}
 
           {/* Failed */}
           {status === 'failed' && (
-            <div className="bg-bg-surface border border-accent/40 rounded-[14px] p-6 mb-6">
-              <h2 className="font-display font-semibold text-2xl text-accent mb-1">Failed</h2>
+            <div className="glass border border-accent/40 rounded-[16px] p-6 mb-6" style={{ borderRadius: 16 }}>
+              <h2 className="card-title text-2xl text-accent mb-1 tracking-tight">Failed</h2>
               <p className="text-sm text-text-muted">All attempts exhausted.</p>
               <ul className="mt-3 space-y-1">
                 {events

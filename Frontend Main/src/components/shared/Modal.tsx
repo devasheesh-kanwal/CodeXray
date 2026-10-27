@@ -7,23 +7,27 @@ const overlayStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: 'rgba(0,0,0,.65)',
+  background: 'rgba(0,0,0,.50)',
   backdropFilter: 'blur(6px)',
+  WebkitBackdropFilter: 'blur(6px)',
 };
 
 const panelStyle: React.CSSProperties = {
-  background: '#26272C',
+  background: 'rgba(255,255,255,.09)',
+  backdropFilter: 'blur(28px) saturate(160%)',
+  WebkitBackdropFilter: 'blur(28px) saturate(160%)',
   border: '1px solid rgba(255,255,255,.12)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(255,255,255,.02), 0 24px 64px rgba(0,0,0,.7)',
   borderRadius: 16,
-  boxShadow: '0 24px 64px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06)',
   maxWidth: 640,
   width: '100%',
   margin: '0 16px',
   maxHeight: '80vh',
   overflow: 'auto',
   padding: 28,
-  color: '#DFF5EB',
+  color: 'var(--text, #DFF5EB)',
   fontFamily: 'Inter, sans-serif',
+  position: 'relative',
 };
 
 export function Modal({
@@ -49,15 +53,17 @@ export function Modal({
   if (!open) return null;
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div style={panelStyle} onClick={(e) => e.stopPropagation()}>
+      <div className="glass-strong" style={panelStyle} onClick={(e) => e.stopPropagation()}>
         {title && (
           <h3
+            className="card-title"
             style={{
+              fontFamily: 'var(--font-heading)',
               fontSize: 20,
-              fontWeight: 600,
-              color: '#DFF5EB',
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+              color: 'var(--text, #DFF5EB)',
               marginBottom: 20,
-              letterSpacing: '0.02em',
             }}
           >
             {title}
@@ -82,7 +88,7 @@ export function ConfirmDialog({
 }) {
   return (
     <Modal open={open} onClose={onCancel} title="Confirm">
-      <p style={{ fontSize: 14, color: '#8FA8A0', marginBottom: 24, lineHeight: 1.6 }}>
+      <p style={{ fontSize: 14, color: 'var(--text-muted, #8FA8A0)', marginBottom: 24, lineHeight: 1.6 }}>
         {message}
       </p>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
@@ -90,10 +96,10 @@ export function ConfirmDialog({
           onClick={onCancel}
           style={{
             padding: '8px 20px',
-            borderRadius: 8,
+            borderRadius: 999,
             border: '1px solid rgba(255,255,255,.12)',
-            background: '#202125',
-            color: '#8FA8A0',
+            background: 'rgba(255,255,255,.07)',
+            color: 'var(--text-muted, #8FA8A0)',
             fontSize: 13,
             cursor: 'pointer',
             fontFamily: 'Inter, sans-serif',
@@ -105,8 +111,8 @@ export function ConfirmDialog({
           onClick={onConfirm}
           style={{
             padding: '8px 20px',
-            borderRadius: 8,
-            background: '#DC1F1F',
+            borderRadius: 999,
+            background: 'var(--accent, #DC1F1F)',
             color: '#fff',
             fontSize: 13,
             fontWeight: 600,

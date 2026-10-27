@@ -15,13 +15,11 @@ export function CodeViewer({
   const hlSet = new Set(highlightLines);
   return (
     <div
+      className="glass-dense"
       style={{
-        background: '#101113',
-        border: '1px solid rgba(255,255,255,.08)',
         borderRadius: 12,
         overflow: 'auto',
         fontSize: 13,
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,.04)',
       }}
     >
       <SyntaxHighlighter
@@ -32,7 +30,7 @@ export function CodeViewer({
         wrapLines
         lineProps={(ln) =>
           hlSet.has(ln)
-            ? { style: { backgroundColor: 'rgba(220,31,31,.18)', display: 'block' } }
+            ? { style: { backgroundColor: 'rgba(220,31,31,.22)', display: 'block' } }
             : {}
         }
         customStyle={{
@@ -43,7 +41,7 @@ export function CodeViewer({
           lineHeight: 1.6,
         }}
         lineNumberStyle={{
-          color: 'rgba(143,168,160,.35)',
+          color: 'rgba(143,168,160,.40)',
           fontSize: '12px',
           userSelect: 'none',
           minWidth: '3em',
