@@ -4,15 +4,21 @@ CodeXray is a small repository assistant prototype. Its backend indexes Python s
 
 ## Run the backend
 
-Set a provider and its API key in the environment, then run from the repository root:
+Provider credentials and defaults can be set in the root `.env` file. The backend loads it automatically; process environment values take precedence. `LLM_PROVIDER=auto` tries configured providers in the order in `LLM_FALLBACK_PROVIDERS`. For a single preferred provider, set `LLM_PROVIDER` to `nvidia`, `groq`, `gemini`, `openrouter`, `deepseek`, or `ollama`.
+
+Run from the repository root:
 
 ```powershell
-$env:LLM_PROVIDER = "groq"
-$env:GROQ_API_KEY = "your-key"
 python Backend/main.py
 ```
 
-Supported providers are `groq`, `openrouter`, and `gemini`. Use `GROQ_API_KEY`, `OPENROUTER_API_KEY`, or `GEMINI_API_KEY` respectively. Optional model overrides are `GROQ_MODEL`, `OPENROUTER_MODEL`, and `GEMINI_MODEL`. The server defaults to `http://127.0.0.1:8000`; set `HOST` or `PORT` to change that. `CODEXRAY_REPO` can point indexing at a different repository.
+For key rotation, use comma-separated variables such as `GROQ_API_KEYS` or `NVIDIA_API_KEYS`; the singular `*_API_KEY` form also works. Invalid credentials are cooled down for an hour, rate-limited credentials for one minute, and transient failures for 20 seconds. The client then tries the next key and provider. Cooldowns reset when the process restarts. Failed attempts only log provider names and HTTP status codes, never key values or provider response bodies.
+
+Default model IDs are set in `.env` and can be overridden with `NVIDIA_MODEL`, `GROQ_MODEL`, `GEMINI_MODEL`, `OPENROUTER_MODEL`, `DEEPSEEK_MODEL`, or `OLLAMA_MODEL`. Provider quotas and free access vary: OpenRouter's `openrouter/free` routes to currently available free models; NVIDIA's selected NIM endpoint is listed as a free prototype endpoint; Gemini's free tier has limited model access; Groq has developer-tier quotas; DeepSeek direct API is metered; Ollama Cloud may consume starter credits or paid credits. Failover does not guarantee free service or separate quotas across keys.
+
+Keep `.env` private. The file is ignored by Git and has been removed from Git tracking while remaining on disk. These credentials were pasted into chat, so rotate them in the provider dashboards if they should remain private.
+
+The server defaults to `http://127.0.0.1:8000`; set `HOST` or `PORT` to change that. `CODEXRAY_REPO` can point indexing at a different repository.
 
 ## API
 
