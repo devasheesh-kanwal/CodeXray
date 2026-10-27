@@ -287,10 +287,20 @@ section:focus { outline: none; }
   /* backwards, not both: a transform/filter left behind would move fixed modals and kill hover lifts */
   animation: pageIn 0.42s cubic-bezier(.2,.7,.2,1) backwards;
 }
+/* Transform only: an opacity or filter on this wrapper would cut every glass panel inside it
+   off from the background, so their blur would vanish while it ran and snap back at the end. */
 @keyframes pageIn {
-  from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
-  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+  from { transform: translateY(14px); }
+  to   { transform: translateY(0); }
 }
+/* Each glass panel fades itself in instead (its own opacity keeps its blur intact). */
+.app-shell main .glass,
+.app-shell main .glass-strong,
+.app-shell main .glass-dense,
+.app-shell main [style*="backdrop-filter"] {
+  animation: glassIn 0.42s cubic-bezier(.2,.7,.2,1) backwards;
+}
+@keyframes glassIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* ═══════════════════════════════════════════════════════════════
    APP MOTION (app shell only; the landing page and loader are untouched)

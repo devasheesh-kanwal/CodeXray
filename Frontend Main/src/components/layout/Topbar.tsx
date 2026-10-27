@@ -79,6 +79,10 @@ export default function Topbar() {
         // let the repo dropdown overflow, and keep the bar above the page content.
         overflow: 'visible',
         zIndex: 30,
+        // light blur so the spider webs behind stay visible
+        background: 'rgba(255,255,255,.025)',
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
       }}
     >
       {/* Repo selector */}
