@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="A starter overview of the CodeXray agent repair loop." />
+    <title>CodeXray — Agent Repair Loop</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <p class="eyebrow">CodeXray</p>
+        <h1>Agent repair loop</h1>
+        <p class="subtitle">Branch <span aria-hidden="true">→</span> fix <span aria-hidden="true">→</span> test <span aria-hidden="true">→</span> evaluate <span aria-hidden="true">→</span> human approval</p>
+      </header>
+
+      <ol class="workflow" aria-label="Repair workflow">
+        <li class="step agent"><strong>Coordinator</strong><span>Assigns tasks and logs progress</span></li>
+        <li class="step agent"><strong>Architect</strong><span>Maps relevant modules</span></li>
+        <li class="step"><strong>Create fix branch</strong><span>Keep the main branch untouched</span></li>
+        <li class="step agent"><strong>Debug and repair</strong><span>Use code and past failures</span></li>
+        <li class="step"><strong>Test runner</strong><span>Run tests in a sandbox</span></li>
+        <li class="step"><strong>Evaluation gate</strong><span>Check tests, regressions, and lint</span></li>
+      </ol>
+
+      <section class="outcomes" aria-label="Evaluation outcomes">
+        <article class="outcome pass"><h2>Pass: review</h2><p>Human approves before merge.</p></article>
+        <article class="outcome retry"><h2>Fail: retry</h2><p>Delete the fix branch and try again.</p></article>
+        <article class="outcome stop"><h2>Three failures: stop</h2><p>Report the result to a human.</p></article>
+      </section>
+      <p class="note">A passing change is reviewed by a person before it is merged to main.</p>
+    </main>
+  </body>
+</html>
