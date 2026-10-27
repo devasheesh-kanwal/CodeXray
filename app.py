@@ -12,9 +12,13 @@ FRONTEND = ROOT / "Frontend Main"
 
 def main() -> int:
     # Run the API and web app together; Ctrl+C stops both."
-    venv_python = BACKEND / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if os.name == "nt":
+        venv_python = BACKEND / ".venv" / "Scripts" / "python.exe"
+        npm = shutil.which("npm.cmd") or shutil.which("npm")
+    else:
+        venv_python = BACKEND / ".venv" / "bin" / "python"
+        npm = shutil.which("npm")
     python = str(venv_python) if venv_python.is_file() else sys.executable
-    npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
     missing: list[str] = []
 
     if not (BACKEND / "app" / "main.py").is_file():
