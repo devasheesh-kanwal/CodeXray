@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import type { Health } from '../../api/types';
@@ -11,6 +11,7 @@ import { ApiErrorView } from '../../components/shared/States';
 export default function Shell({ children }: { children?: React.ReactNode }) {
   const health = useQuery({ queryKey: ['health'], queryFn: () => apiFetch<Health>('/api/health'), retry: 1, refetchInterval: 15000 });
   const showBanner = health.isError;
+  const { pathname } = useLocation();
 
   return (
     <RepoProvider>
@@ -39,7 +40,8 @@ export default function Shell({ children }: { children?: React.ReactNode }) {
               padding: '32px',
             }}
           >
-            <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+            {/* keyed by route so the page-enter motion replays on every navigation */}
+            <div key={pathname} style={{ maxWidth: 1280, margin: '0 auto' }}>
               {children ?? <Outlet />}
             </div>
           </main>

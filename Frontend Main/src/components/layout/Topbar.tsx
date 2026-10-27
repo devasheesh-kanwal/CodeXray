@@ -10,6 +10,14 @@ export default function Topbar() {
   const { selectedRepoId, setSelectedRepoId, setSelectedRepo } = useRepo();
   const [open, setOpen] = useState(false);
 
+  // Escape closes the repo dropdown (a click outside already does).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
   const reposQ = useQuery({
     queryKey: ['repos'],
     queryFn: () => apiFetch<Repo[]>('/api/repos'),
@@ -67,6 +75,10 @@ export default function Topbar() {
         padding: '0 32px',
         flexShrink: 0,
         position: 'relative',
+        // .glass clips its children and its blur makes a new stacking context:
+        // let the repo dropdown overflow, and keep the bar above the page content.
+        overflow: 'visible',
+        zIndex: 30,
       }}
     >
       {/* Repo selector */}
@@ -120,6 +132,10 @@ export default function Topbar() {
                 maxHeight: 240,
                 overflow: 'auto',
                 padding: 6,
+                // A blur nested inside the bar's blur cannot see the page behind it, so use
+                // a near-opaque fill instead of relying on backdrop-filter.
+                background: 'rgba(22,22,26,.96)',
+                animation: 'dropdownIn 0.16s ease-out both',
               }}
             >
               {repos.length === 0 && (
@@ -177,6 +193,7 @@ export default function Topbar() {
           }}
         >
           <span
+            className={backendOk && !USE_MOCK ? 'live-dot' : undefined}
             style={{
               width: 7,
               height: 7,

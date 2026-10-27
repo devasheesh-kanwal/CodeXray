@@ -12,7 +12,9 @@ const FINAL_STATES = ['MERGED', 'REJECTED', 'FAILED'];
 export default function RepairPage() {
   const { selectedRepoId } = useRepo();
   const qc = useQueryClient();
-  const [runId, setRunId] = useState<string | null>(null);
+  // A run belongs to the repo it was started for; switching repos shows that repo's form.
+  const [opened, setOpened] = useState<{ id: string; repo: string } | null>(null);
+  const runId = opened && opened.repo === selectedRepoId ? opened.id : null;
   const [issue, setIssue] = useState('');
   const [testCommand, setTestCommand] = useState('');
   const [confirm, setConfirm] = useState<'approve' | 'reject' | null>(null);
@@ -31,7 +33,7 @@ export default function RepairPage() {
   function openRun(id: string | null) {
     setLive([]);
     setStreamError(null);
-    setRunId(id);
+    setOpened(id && selectedRepoId ? { id, repo: selectedRepoId } : null);
   }
 
   const runQ = useQuery({
@@ -44,6 +46,8 @@ export default function RepairPage() {
   useEffect(() => {
     if (!runId) return;
     return subscribeRepairEvents(runId, {
+      // On every (re)connect the server replays the full history, so start from empty.
+      onOpen: () => setLive([]),
       onEvent: (e) => setLive((prev) => [...prev, e]),
       onDone: () => qc.invalidateQueries({ queryKey: ['repair', runId] }),
       onError: (e) => setStreamError(e.message),
@@ -69,8 +73,10 @@ export default function RepairPage() {
 
   if (!selectedRepoId) return <EmptyState title="Select a repository" description="Choose a repo in the top bar." />;
 
-  const activeRunId = startMut.error instanceof ApiError ? (startMut.error.details.run_id as string | undefined) : undefined;
+  const activeRunId = startMut.error instanceof ApiError && startMut.error.details.repo_id === selectedRepoId
+    ? (startMut.error.details.run_id as string | undefined) : undefined;
   const lastEvent = events[events.length - 1];
+  const working = !!runId && !['AWAITING_APPROVAL', ...FINAL_STATES].includes(state ?? lastEvent?.state ?? 'CREATED');
   const failReason = [...events].reverse().find((e) => e.kind === 'note' || e.kind === 'error')?.data.reason as string | undefined;
 
   return (
@@ -130,7 +136,11 @@ export default function RepairPage() {
       {runId && (
         <div>
           <div className="flex items-center gap-3 mb-4">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-bg-raised border border-border text-text">
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-mono bg-bg-raised border border-border text-text ${
+                working ? 'shimmer' : ''
+              }`}
+            >
               {state ?? lastEvent?.state ?? 'CREATED'}
             </span>
             <span className="text-xs font-mono text-text-muted">
@@ -170,7 +180,7 @@ export default function RepairPage() {
               return (
                 <div
                   key={`${e.ts}-${i}`}
-                  className={`border rounded-[10px] p-3.5 transition-colors ${
+                  className={`event-in border rounded-[10px] p-3.5 transition-colors ${
                     failed ? 'border-accent/40 bg-accent-soft' : 'glass'
                   }`}
                 >

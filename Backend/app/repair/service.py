@@ -74,6 +74,28 @@ class RepairService:
         self.live: dict[str, RunState] = {}  # run_id -> state, while the server runs
         self.tasks: dict[str, asyncio.Task] = {}
 
+    def recover(self) -> None:
+        """At startup: a run the last server left mid-way can never finish, so it becomes
+        FAILED and its branch and worktree are removed; a run awaiting approval takes
+        its repo's lock again (one repair per repo survives a restart)."""
+        runs_dir = self.settings.data_path / "runs"
+        for path in sorted(runs_dir.glob("run_*.json")):
+            try:
+                state = RunState.load(runs_dir, path.stem)
+            except ValueError:  # an unreadable or older-format run file
+                logger.warning("Skipping unreadable run file %s", path.name)
+                continue
+            if state is None or state.workflow != "repair":
+                continue
+            if state.status == "running":
+                state.status = "failed"
+                state.stop_reason = "interrupted by a server restart"
+                state.emit("run_finished", "run failed: interrupted by a server restart",
+                           status="failed", reason=state.stop_reason)
+                self._cleanup(state)
+            elif api_state(state) == "AWAITING_APPROVAL":
+                self.active.setdefault(state.repo_id, state.run_id)
+
     # ---------- start ----------
 
     def start(self, repo_id: str, issue: str, test_command: str | None) -> RunState:

@@ -73,6 +73,7 @@ class RunState(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
     artifacts: dict[str, Any] = Field(default_factory=default_artifacts)
     models_used: dict[str, list[str]] = Field(default_factory=dict)  # agent -> ["provider/model"]
+    uncached_calls: dict[str, int] = Field(default_factory=dict)  # agent -> replies not from the LLM cache
     attempt: int = 1
     budget: Budget = Field(default_factory=Budget)
     usage: Usage = Field(default_factory=Usage)
@@ -149,10 +150,12 @@ class RunState(BaseModel):
 
     # ---------- models and budgets ----------
 
-    def record_model(self, agent: str, provider: str, model: str) -> None:
+    def record_model(self, agent: str, provider: str, model: str, cached: bool = False) -> None:
         used = self.models_used.setdefault(agent, [])
         if f"{provider}/{model}" not in used:
             used.append(f"{provider}/{model}")
+        if not cached:
+            self.uncached_calls[agent] = self.uncached_calls.get(agent, 0) + 1
 
     def charge(self, prompt_tokens: int, completion_tokens: int) -> None:
         self.usage.llm_calls += 1

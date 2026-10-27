@@ -106,6 +106,7 @@ export default function ExplorerPage() {
       id: e.source + e.target,
       source: e.source,
       target: e.target,
+      animated: e.type === 'calls',  // calls flow as moving dashes; imports stay solid (see the legend)
       style: { stroke: 'rgba(217,160,102,.35)', strokeWidth: 1.5, strokeDasharray: e.type === 'calls' ? '5 5' : undefined },
     }));
 
@@ -185,7 +186,7 @@ export default function ExplorerPage() {
               <Background color="rgba(255,255,255,.06)" gap={16} />
               <Controls />
               <MiniMap
-                style={{ background: 'rgba(14,14,18,.85)', border: '1px solid rgba(255,255,255,.10)', borderRadius: 8 }}
+                style={{ background: 'rgba(14,14,18,.85)', border: '1px solid rgba(255,255,255,.10)', borderRadius: 8, width: 120, height: 80 }}
                 nodeColor="#D9A066"
                 maskColor="rgba(0,0,0,.7)"
               />

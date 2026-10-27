@@ -52,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.index_service.mark_interrupted()
     app.state.qa_service = QaService(settings, app.state.index_service, app.state.llm_router)
     app.state.repair_service = RepairService(settings, app.state.index_service, app.state.llm_router)
+    app.state.repair_service.recover()
 
     app.add_middleware(
         CORSMiddleware,

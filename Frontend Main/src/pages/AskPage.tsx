@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { streamPost, apiFetch } from '../api/client';
 import { useRepo } from '../context/RepoContext';
@@ -59,8 +59,11 @@ const glassDense: React.CSSProperties = {
 
 export default function AskPage() {
   const { selectedRepoId, setSelectedRepoId, setSelectedRepo } = useRepo();
-  const [messages, setMessages] = useState<Msg[]>([]);
-  const historyRef = useRef<Record<string, Msg[]>>({});
+  // One chat per repo. Each update names its repo, so an answer always lands in the
+  // chat it was asked in (two save/load effects used to copy chats between repos).
+  const [chats, setChats] = useState<Record<string, Msg[]>>({});
+  const messages = useMemo(() => (selectedRepoId && chats[selectedRepoId]) || [], [chats, selectedRepoId]);
+  const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const reposQ = useQuery({
@@ -68,18 +71,12 @@ export default function AskPage() {
     queryFn: () => apiFetch<Repo[]>('/api/repos'),
   });
 
-  useEffect(() => {
-    if (selectedRepoId) historyRef.current[selectedRepoId] = messages;
-  }, [messages, selectedRepoId]);
-
-  useEffect(() => {
-    if (selectedRepoId) setMessages(historyRef.current[selectedRepoId] || []);
-  }, [selectedRepoId]);
+  // Switching repos or leaving the page stops a running answer (and its LLM calls).
+  useEffect(() => () => abortRef.current?.abort(), [selectedRepoId]);
 
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<{ agent: string; status: string } | null>(null);
-  const [aborter, setAborter] = useState<AbortController | null>(null);
   const [viewFile, setViewFile] = useState<{ path: string; start: number; end: number } | null>(null);
 
   const fileQ = useQuery({
@@ -96,24 +93,26 @@ export default function AskPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentAgent]);
 
-  function updateLast(change: (m: Msg) => Msg) {
-    setMessages((m) => [...m.slice(0, -1), change(m[m.length - 1])]);
+  function updateChat(repo: string, change: (m: Msg[]) => Msg[]) {
+    setChats((all) => ({ ...all, [repo]: change(all[repo] || []) }));
   }
 
   async function send(q?: string) {
     const question = (q ?? input).trim();
     if (!question || streaming || !selectedRepoId) return;
+    const repo = selectedRepoId;
+    const updateLast = (change: (m: Msg) => Msg) => updateChat(repo, (m) => [...m.slice(0, -1), change(m[m.length - 1])]);
     setInput('');
-    setMessages((m) => [...m, { role: 'user', content: question }, { role: 'assistant', content: '' }]);
+    updateChat(repo, (m) => [...m, { role: 'user', content: question }, { role: 'assistant', content: '' }]);
     setStreaming(true);
     setCurrentAgent({ agent: 'architect', status: 'starting' });
 
     const ctrl = new AbortController();
-    setAborter(ctrl);
+    abortRef.current = ctrl;
 
     try {
       await streamPost(
-        `/api/repos/${selectedRepoId}/ask/stream`,
+        `/api/repos/${repo}/ask/stream`,
         { question },
         (ev) => {
           if (ev.event === 'agent') {
@@ -135,12 +134,12 @@ export default function AskPage() {
     } finally {
       setStreaming(false);
       setCurrentAgent(null);
-      setAborter(null);
+      if (abortRef.current === ctrl) abortRef.current = null;
     }
   }
 
   function stop() {
-    aborter?.abort();
+    abortRef.current?.abort();
     setStreaming(false);
     setCurrentAgent(null);
   }
@@ -165,7 +164,11 @@ export default function AskPage() {
       );
     }
     if (!msg.content) {
-      return <span style={{ fontSize: 12, color: '#8FA8A0', fontFamily: 'JetBrains Mono, monospace' }}>thinking…</span>;
+      return (
+        <span className="typing-dots" role="status" aria-label="thinking">
+          <i /><i /><i />
+        </span>
+      );
     }
 
     // Only markers listed in final.citations are verified; others stay plain text.
@@ -338,6 +341,7 @@ export default function AskPage() {
               }}
             >
               <span
+                className="pulse-dot"
                 style={{
                   width: 8,
                   height: 8,
@@ -384,7 +388,11 @@ export default function AskPage() {
               </div>
             )}
             {messages.map((m, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div
+                key={i}
+                className={m.role === 'user' ? 'msg-in-user' : 'msg-in-bot'}
+                style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}
+              >
                 <div
                   style={{
                     maxWidth: '88%',

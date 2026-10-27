@@ -6,6 +6,7 @@ import pytest
 
 from app.errors import ApiError
 from app.llm.routes import LaneEntry
+from app.repair.service import RepairService
 from app.repair.workflow import approved_branch_name, branch_name, repro_path
 from tests.llm.fakes import error
 from tests.repair.conftest import (
@@ -295,3 +296,38 @@ def test_test_command_must_run_pytest(kit):
     with pytest.raises(ApiError) as exc:
         kit.service.start(kit.repo_id, "bug", "rm -rf /")
     assert exc.value.status_code == 422
+
+
+# ---------- server restart ----------
+
+
+def restarted(kit) -> RepairService:
+    """A fresh RepairService on the same data folder, as after a server restart."""
+    service = RepairService(kit.service.settings, kit.service.index, kit.service.router, kit.service.sandbox)
+    service.recover()
+    return service
+
+
+def test_restart_fails_an_interrupted_run_and_removes_its_branch(kit):
+    script_success(kit)
+    state = kit.run()
+    # Pretend the server died mid-attempt: the saved run still says "running".
+    state.status, state.machine_state = "running", "PATCHING"
+    state.save()
+
+    service = restarted(kit)
+    run = service.snapshot(state.run_id)
+    assert run.state == "FAILED"
+    assert run.events[-1].kind == "error" and "server restart" in run.events[-1].message
+    assert kit.branches() == ["main"] and len(kit.worktrees()) == 1
+    assert service.active == {}
+
+
+def test_restart_keeps_the_lock_of_a_run_awaiting_approval(kit):
+    script_success(kit)
+    state = kit.run()
+    service = restarted(kit)
+    assert service.active == {kit.repo_id: state.run_id}
+    with pytest.raises(ApiError) as exc:
+        service.start(kit.repo_id, "another bug", None)
+    assert exc.value.status_code == 409

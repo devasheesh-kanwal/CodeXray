@@ -97,9 +97,13 @@ export async function streamPost(
       if (parsed) onEvent(parsed as AskStreamEvent);
     }
   }
+  // A last event without the closing blank line (e.g. a proxy trimmed it) still counts.
+  const last = parseBlock(buffer + decoder.decode());
+  if (last) onEvent(last as AskStreamEvent);
 }
 
 export type RepairStreamHandlers = {
+  onOpen?: () => void;
   onEvent: (e: RepairEvent) => void;
   onDone: (state: string) => void;
   onError: (e: ErrorBody) => void;
@@ -109,6 +113,7 @@ export type RepairStreamHandlers = {
 export function subscribeRepairEvents(runId: string, h: RepairStreamHandlers): () => void {
   if (USE_MOCK) return mockSubscribeRepairEvents(runId, h);
   const es = new EventSource(`${BASE}/api/repairs/${runId}/events`);
+  es.addEventListener('open', () => h.onOpen?.());
   es.addEventListener('repair_event', (e) => h.onEvent(JSON.parse((e as MessageEvent).data)));
   es.addEventListener('done', (e) => {
     h.onDone(JSON.parse((e as MessageEvent).data).state);

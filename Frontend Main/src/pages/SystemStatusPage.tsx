@@ -119,7 +119,10 @@ export default function SystemStatusPage() {
                         {c.cached ? 'yes' : 'no'}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-text-faint">{c.switch_reason || '—'}</td>
+                    <td className="py-2.5 px-3 text-text-faint max-w-[360px]" title={c.switch_reason || undefined}>
+                      {/* long provider errors: two lines here, the full text on hover */}
+                      <span className="line-clamp-2">{c.switch_reason || '—'}</span>
+                    </td>
                   </tr>
                 );
               })}
