@@ -6,11 +6,13 @@
    LANDING PAGE  (keeps the original deep black)
    ─────────────────────────────────────────────── */
 :root {
+  --font-display:         'Bodoni Moda', Georgia, 'Times New Roman', serif;
+  --text:                 #CFF1E6;
   --landing-bg:           #000000;
   --landing-surface:      #0A0A0A;
   --landing-raised:       #121212;
   --landing-red:          #C21C1D;
-  --landing-mint:         #DFF5EB;
+  --landing-mint:         #CFF1E6;
   --landing-muted:        #8FA8A0;
   --landing-border:       rgba(255,255,255,.10);
   --landing-border-strong:rgba(255,255,255,.20);
@@ -25,6 +27,8 @@
    Scoped to .app-shell so landing stays untouched
    ─────────────────────────────────────────────── */
 .app-shell {
+  --font-display: 'Bodoni Moda', Georgia, 'Times New Roman', serif;
+
   /* Layer backgrounds */
   --bg-deep:     #101113;   /* page */
   --bg-surface:  #17181B;   /* sidebar, topbar, cards */
@@ -36,7 +40,7 @@
   --border-strong: rgba(255,255,255,.16);
 
   /* Text (mint-tinted scale) */
-  --text:       #DFF5EB;
+  --text:       #CFF1E6;
   --text-muted: #8FA8A0;
   --text-faint: rgba(143,168,160,.50);
 

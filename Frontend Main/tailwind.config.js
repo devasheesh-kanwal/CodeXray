@@ -32,7 +32,7 @@ export default {
 
         // Text  (mint-tinted scale)
         text: {
-          DEFAULT: '#DFF5EB',      // --text  (mint)
+          DEFAULT: '#CFF1E6',      // --text  (mint)
           muted:   '#8FA8A0',      // --text-muted
           faint:   'rgba(143,168,160,0.5)', // --text-faint
           inverse: '#000000',
@@ -65,7 +65,7 @@ export default {
       fontFamily: {
         sans:    ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
         mono:    ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
-        display: ['Bodoni Moda', 'Georgia', 'serif'],
+        display: ['var(--font-display)', '"Bodoni Moda"', 'Georgia', '"Times New Roman"', 'serif'],
         landing: ['Jost', 'system-ui', 'sans-serif'],
       },
 

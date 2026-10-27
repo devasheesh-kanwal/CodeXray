@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLaunchApp, LOADER_DURATION_MS } from '../../context/LaunchContext';
+import Logo from '../ui/Logo';
 
 const STATUSES = ['Indexing files...', 'Mapping dependencies...', 'Reading symbols...', 'Ready.'];
 
@@ -78,7 +79,7 @@ export async function ask(q) { return retrieve(q); }
       )}
 
       <div className="relative z-10 flex flex-col items-center gap-6">
-        <h1 className="font-display text-5xl font-black text-landing-mint tracking-wide">CodeXray</h1>
+        <Logo size="lg" as="h1" />
         {reduce ? (
           <p className="font-landing text-xs tracking-[0.22em] text-landing-mint/70">LOADING...</p>
         ) : (

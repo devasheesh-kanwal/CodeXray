@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { Database, FolderTree, MessageSquare, GitPullRequest, Wrench, Activity } from 'lucide-react';
+import Logo from '../ui/Logo';
 
 const items = [
   { to: '/repos',    label: 'Repos',         icon: Database },
@@ -24,15 +25,7 @@ export default function Sidebar() {
         className="h-[72px] flex items-center px-6 shrink-0"
         style={{ borderBottom: '1px solid rgba(255,255,255,.08)' }}
       >
-        <a
-          href="/"
-          className="font-display font-bold text-[22px] tracking-widest uppercase"
-          style={{ color: '#DFF5EB', letterSpacing: '0.14em' }}
-        >
-          Code
-          <span style={{ color: '#DC1F1F' }}>X</span>
-          ray
-        </a>
+        <Logo size="md" href="/" />
       </div>
 
       {/* Nav links */}
@@ -86,7 +79,7 @@ export default function Sidebar() {
           color: 'rgba(143,168,160,.45)',
         }}
       >
-        v0.1 · CodeXray
+        v0.1 · mock
       </div>
     </aside>
   );

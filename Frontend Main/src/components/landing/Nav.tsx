@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { useLaunchApp } from '../../context/LaunchContext';
 import { scrollToSection } from '../../lib/scrollToSection';
+import Logo from '../ui/Logo';
 
 const links = [
   { href: '#home', id: 'home', label: 'HOME' },
@@ -49,13 +50,14 @@ export default function Nav() {
   return (
     <nav className={`w-full sticky top-0 z-40 border-b transition-colors ${solid ? 'bg-bg-deep/90 backdrop-blur border-[rgba(207,241,230,0.18)]' : 'bg-transparent border-[rgba(207,241,230,0.18)]'}`}>
       <div className="max-w-[1440px] mx-auto px-6 h-16 flex items-center justify-between">
-        <a
+        <Logo
+          size="sm"
           href="#home"
-          onClick={(e) => { e.preventDefault(); handleLink('home'); }}
-          className="font-display text-xl tracking-wide text-landing-mint"
-        >
-          CodeXray
-        </a>
+          onClick={(e) => {
+            e.preventDefault();
+            handleLink('home');
+          }}
+        />
         <ul className="hidden md:flex items-center gap-8 font-landing tracking-[0.2em] text-landing-mint/80 text-[clamp(12px,0.85vw,14px)]">
           {links.map((l) => (
             <li key={l.id}>

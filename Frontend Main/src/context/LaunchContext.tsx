@@ -22,21 +22,25 @@ export function LaunchProvider({ children }: { children: React.ReactNode }) {
     if (isLaunching) return;
     setIsLaunching(true);
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReduced) {
-      const t = window.setTimeout(() => {
-        navigate('/repos');
-        setIsLaunching(false);
-      }, 600);
-      timers.current.push(t);
-      return;
-    }
-    const t1 = window.setTimeout(() => {
+    const duration = prefersReduced ? 600 : LOADER_DURATION_MS + 200;
+
+    const t1 = window.setTimeout(async () => {
+      try {
+        if ('fonts' in document) {
+          await document.fonts.ready;
+          await document.fonts.load('500 28px "Bodoni Moda"').catch(() => {});
+        }
+      } catch (err) {
+        console.warn('Font loading check error:', err);
+      }
       navigate('/repos');
-    }, LOADER_DURATION_MS + 200);
-    const t2 = window.setTimeout(() => {
-      setIsLaunching(false);
-    }, LOADER_DURATION_MS + 200 + 300);
-    timers.current.push(t1, t2);
+      const t2 = window.setTimeout(() => {
+        setIsLaunching(false);
+      }, prefersReduced ? 0 : 300);
+      timers.current.push(t2);
+    }, duration);
+
+    timers.current.push(t1);
   }, [isLaunching, navigate]);
 
   // cleanup on unmount
