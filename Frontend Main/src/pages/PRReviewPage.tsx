@@ -1,48 +1,75 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiFetch } from '../api/client';
+import { apiFetch, apiPost } from '../api/client';
 import { useRepo } from '../context/RepoContext';
-import { Loading, EmptyState, ErrorBanner } from '../components/shared/States';
+import { Loading, EmptyState, ErrorBanner, ApiErrorView } from '../components/shared/States';
 import { SeverityBadge, DesignBadge } from '../components/shared/Badges';
 import { Modal } from '../components/shared/Modal';
-import ReactDiffViewer from 'react-diff-viewer-continued';
-import type { Finding, PRReview, Rule } from '../api/types';
+import type { Finding, ReviewRequest, ReviewResponse, RulesResponse } from '../api/types';
 import { Copy } from 'lucide-react';
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+type DiffRow = { text: string; kind: 'add' | 'del' | 'ctx' | 'meta'; file: string; newLine: number | null };
 
-const darkDiffStyles = {
-  variables: {
-    dark: {
-      diffViewerBackground: '#0B0B0E',
-      diffViewerColor: '#DFF5EB',
-      addedBackground: 'rgba(48, 164, 108, 0.15)',
-      addedColor: '#DFF5EB',
-      removedBackground: 'rgba(220, 31, 31, 0.18)',
-      removedColor: '#FF9E9E',
-      wordAddedBackground: 'rgba(48, 164, 108, 0.28)',
-      wordRemovedBackground: 'rgba(220, 31, 31, 0.35)',
-      addedGutterBackground: '#0E0E12',
-      removedGutterBackground: '#0E0E12',
-      gutterBackground: '#0E0E12',
-      gutterBackgroundDark: '#08080A',
-      highlightBackground: 'rgba(220, 31, 31, 0.14)',
-      highlightGutterBackground: 'rgba(220, 31, 31, 0.20)',
-      codeFoldGutterBackground: '#0E0E12',
-      codeFoldBackground: '#0E0E12',
-      emptyLineBackground: '#0B0B0E',
-      gutterColor: 'rgba(143, 168, 160, 0.45)',
-      addedGutterColor: '#DFF5EB',
-      removedGutterColor: '#DC1F1F',
-      codeFoldContentColor: 'rgba(143, 168, 160, 0.65)',
-    },
-  },
-  line: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: '13px',
-    lineHeight: '1.6',
-  },
+/** Split a unified diff into rows that know their file and line number after the change. */
+function parseDiff(diff: string): DiffRow[] {
+  const rows: DiffRow[] = [];
+  let file = '';
+  let newLine = 0;
+  for (const text of diff.split('\n')) {
+    if (text.startsWith('+++ ')) {
+      file = text.slice(4).trim().replace(/^b\//, '');
+      rows.push({ text, kind: 'meta', file, newLine: null });
+    } else if (text.startsWith('--- ') || text.startsWith('diff ') || text.startsWith('index ')) {
+      rows.push({ text, kind: 'meta', file, newLine: null });
+    } else if (text.startsWith('@@')) {
+      newLine = Number(/\+(\d+)/.exec(text)?.[1] ?? 1);
+      rows.push({ text, kind: 'meta', file, newLine: null });
+    } else if (text.startsWith('+')) {
+      rows.push({ text, kind: 'add', file, newLine: newLine++ });
+    } else if (text.startsWith('-')) {
+      rows.push({ text, kind: 'del', file, newLine: null });
+    } else {
+      rows.push({ text, kind: 'ctx', file, newLine: newLine++ });
+    }
+  }
+  return rows;
+}
+
+const ROW_COLORS: Record<DiffRow['kind'], { bg: string; fg: string }> = {
+  add: { bg: 'rgba(48,164,108,.15)', fg: '#DFF5EB' },
+  del: { bg: 'rgba(220,31,31,.18)', fg: '#FF9E9E' },
+  ctx: { bg: 'transparent', fg: '#DFF5EB' },
+  meta: { bg: 'transparent', fg: 'rgba(143,168,160,.65)' },
 };
+
+function DiffView({ diff, finding }: { diff: string; finding: Finding }) {
+  const rows = parseDiff(diff);
+  return (
+    <pre style={{ margin: 0, padding: '12px 0', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, lineHeight: 1.6 }}>
+      {rows.map((r, i) => {
+        const hit = r.newLine === finding.line && r.file === finding.file;
+        const c = ROW_COLORS[r.kind];
+        return (
+          <div
+            key={i}
+            ref={hit ? (el) => el?.scrollIntoView({ block: 'center' }) : undefined}
+            style={{
+              display: 'flex',
+              background: hit ? 'rgba(220,31,31,.30)' : c.bg,
+              color: c.fg,
+              borderLeft: hit ? '3px solid #DC1F1F' : '3px solid transparent',
+            }}
+          >
+            <span style={{ width: 44, textAlign: 'right', paddingRight: 10, color: 'rgba(143,168,160,.45)', userSelect: 'none', flexShrink: 0 }}>
+              {r.newLine ?? ''}
+            </span>
+            <span style={{ whiteSpace: 'pre', paddingRight: 12 }}>{r.text}</span>
+          </div>
+        );
+      })}
+    </pre>
+  );
+}
 
 export default function PRReviewPage() {
   const { selectedRepoId } = useRepo();
@@ -51,48 +78,44 @@ export default function PRReviewPage() {
   const [base, setBase] = useState('');
   const [head, setHead] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<unknown>(null);
   const [progress, setProgress] = useState<string | null>(null);
-  const [review, setReview] = useState<PRReview | null>(null);
+  const [review, setReview] = useState<ReviewResponse | null>(null);
+  const [reviewedDiff, setReviewedDiff] = useState('');
   const [selected, setSelected] = useState<Finding | null>(null);
   const [sevFilter, setSevFilter] = useState<string>('all');
-  const [srcFilter, setSrcFilter] = useState<string>('all');
+  const [catFilter, setCatFilter] = useState<string>('all');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const rulesQ = useQuery({
-    queryKey: ['rules'],
-    queryFn: () => apiFetch<Rule[]>('/api/rules'),
-    enabled: rulesOpen,
-  });
-
-  const sampleMut = useMutation({
-    mutationFn: () => apiFetch<{ diff: string }>('/api/pr/sample'),
-    onSuccess: (d) => setDiff(d.diff),
+    queryKey: ['rules', selectedRepoId],
+    queryFn: () => apiFetch<RulesResponse>(`/api/repos/${selectedRepoId}/rules`),
+    enabled: rulesOpen && !!selectedRepoId,
   });
 
   const reviewMut = useMutation({
     mutationFn: async () => {
-      setProgress('Submitting…');
-      await new Promise((r) => setTimeout(r, 300));
-      setProgress('Analyzing diff…');
-      const body = mode === 'paste' ? { diff, repoId: selectedRepoId } : { base, head, repoId: selectedRepoId };
-      const res = await apiFetch<PRReview>('/api/pr/review', { method: 'POST', body: JSON.stringify(body) });
-      setProgress('Done');
-      return res;
+      setProgress('Reviewing diff…');
+      const body: ReviewRequest = mode === 'paste' ? { diff_text: diff } : { base_branch: base.trim(), head_branch: head.trim() };
+      return apiPost<ReviewResponse>(`/api/repos/${selectedRepoId}/review`, body);
     },
     onSuccess: (r) => {
       setReview(r);
+      setReviewedDiff(mode === 'paste' ? diff : '');
+      setSelected(null);
       setProgress(null);
-      setError(null);
+      setApiError(null);
     },
-    onError: (e: any) => {
-      setError(e.message || 'Review failed');
+    onError: (e) => {
+      setApiError(e);
       setProgress(null);
     },
   });
 
   function submit() {
     setError(null);
+    setApiError(null);
     if (mode === 'paste' && !diff.trim()) {
       setError('Paste a diff');
       return;
@@ -107,8 +130,10 @@ export default function PRReviewPage() {
   const filtered = (review?.findings || []).filter(
     (f) =>
       (sevFilter === 'all' || f.severity === sevFilter) &&
-      (srcFilter === 'all' || f.source === srcFilter),
+      (catFilter === 'all' || f.category === catFilter),
   );
+
+  if (!selectedRepoId) return <EmptyState title="Select a repository" description="Choose a repo in the top bar." />;
 
   return (
     <div className="font-sans">
@@ -229,25 +254,6 @@ export default function PRReviewPage() {
         )}
 
         <div className="flex items-center gap-3">
-          {USE_MOCK && mode === 'paste' && (
-            <button
-              type="button"
-              onClick={() => sampleMut.mutate()}
-              style={{
-                padding: '8px 18px',
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,.12)',
-                background: 'rgba(255,255,255,.07)',
-                color: 'var(--text-muted, #8FA8A0)',
-                fontSize: 12,
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              Load sample
-            </button>
-          )}
           <button
             type="button"
             onClick={submit}
@@ -273,6 +279,7 @@ export default function PRReviewPage() {
 
         {progress && <p className="text-xs font-mono text-text-muted mt-3">{progress}</p>}
         {error && <div className="mt-4"><ErrorBanner message={error} /></div>}
+        {!!apiError && <div className="mt-4"><ApiErrorView error={apiError} onRetry={submit} /></div>}
       </div>
 
       {review && (
@@ -324,8 +331,8 @@ export default function PRReviewPage() {
               <option value="low">Low</option>
             </select>
             <select
-              value={srcFilter}
-              onChange={(e) => setSrcFilter(e.target.value)}
+              value={catFilter}
+              onChange={(e) => setCatFilter(e.target.value)}
               style={{
                 height: 36,
                 padding: '0 12px',
@@ -339,12 +346,11 @@ export default function PRReviewPage() {
                 cursor: 'pointer',
               }}
             >
-              <option value="all">All sources</option>
-              <option value="design">Design</option>
-              <option value="security">Security</option>
-              <option value="performance">Performance</option>
-              <option value="style">Style</option>
+              <option value="all">All categories</option>
               <option value="bug">Bug</option>
+              <option value="security">Security</option>
+              <option value="practice">Practice</option>
+              <option value="design">Design</option>
             </select>
           </div>
 
@@ -368,15 +374,13 @@ export default function PRReviewPage() {
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <SeverityBadge severity={f.severity} />
-                      {f.breaks_design && <DesignBadge />}
+                      {f.category === 'design' && <DesignBadge />}
                       <span className="card-title text-sm text-text font-semibold">{f.title}</span>
                     </div>
-                    <p className="text-xs text-text-muted mb-2 leading-relaxed">{f.description}</p>
-                    {f.file && (
-                      <p className="text-xs font-mono text-text-faint">
-                        {f.file}{f.line ? `:${f.line}` : ''}
-                      </p>
-                    )}
+                    <p className="text-xs text-text-muted mb-2 leading-relaxed">{f.explanation}</p>
+                    <p className="text-xs font-mono text-text-faint">
+                      {f.file}:{f.line} · {f.category} · {f.source} · {Math.round(f.confidence * 100)}%
+                    </p>
                     <div className="mt-2.5 flex items-center gap-2">
                       <code className="text-xs font-mono bg-white/5 text-text border border-white/10 px-2 py-1 rounded-[6px]">
                         {f.suggested_fix}
@@ -403,19 +407,11 @@ export default function PRReviewPage() {
 
             {/* Diff Viewer panel */}
             <div className="glass-dense rounded-[14px] overflow-auto max-h-[640px]" style={{ borderRadius: 14 }}>
-              {selected ? (
-                <ReactDiffViewer
-                  oldValue={diff || ''}
-                  newValue={diff || ''}
-                  splitView={false}
-                  hideLineNumbers={false}
-                  useDarkTheme={true}
-                  styles={darkDiffStyles}
-                  highlightLines={selected.line ? ['R' + selected.line] : []}
-                />
+              {selected && reviewedDiff ? (
+                <DiffView diff={reviewedDiff} finding={selected} />
               ) : (
                 <div className="p-8 h-full flex items-center justify-center">
-                  <EmptyState title="Select a finding" description="Diff highlights the selected line." />
+                  <EmptyState title="Select a finding" description={reviewedDiff ? 'The diff highlights the line it points to.' : 'Branch reviews have no pasted diff to show.'} />
                 </div>
               )}
             </div>
@@ -426,11 +422,12 @@ export default function PRReviewPage() {
       {/* Rules Modal */}
       <Modal open={rulesOpen} onClose={() => setRulesOpen(false)} title="Active Rules">
         {rulesQ.isLoading && <Loading />}
+        {rulesQ.isError && <ApiErrorView error={rulesQ.error} onRetry={() => rulesQ.refetch()} />}
         <div className="space-y-3 divide-y divide-border/60">
-          {rulesQ.data?.map((r) => (
+          {rulesQ.data?.rules.map((r) => (
             <div key={r.id} className="pt-3">
               <div className="flex items-center justify-between mb-1">
-                <span className="card-title text-sm font-semibold text-text">{r.name}</span>
+                <span className="card-title text-sm font-semibold text-text">{r.title} <span className="text-xs font-mono text-text-faint">({r.severity})</span></span>
                 <span className={`text-xs font-mono uppercase ${r.enabled ? 'text-text' : 'text-text-faint'}`}>
                   {r.enabled ? 'enabled' : 'disabled'}
                 </span>

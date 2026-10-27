@@ -1,15 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '../../api/client';
+import { apiFetch, USE_MOCK } from '../../api/client';
 import { useRepo } from '../../context/RepoContext';
 import type { Repo, LLMStatus } from '../../api/types';
 import { ChevronDown } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 export default function Topbar() {
   const { selectedRepoId, setSelectedRepoId, setSelectedRepo } = useRepo();
   const [open, setOpen] = useState(false);
+
+  // Escape closes the repo dropdown (a click outside already does).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   const reposQ = useQuery({
     queryKey: ['repos'],
@@ -24,28 +31,26 @@ export default function Topbar() {
     retry: 1,
   });
 
-  const repos = reposQ.data || [];
-  const selected = repos.find((r) => (r.id || (r as any).repo_id) === selectedRepoId) || null;
+  const repos = useMemo(() => reposQ.data || [], [reposQ.data]);
+  const selected = repos.find((r) => r.repo_id === selectedRepoId) || null;
+  // The API has no single "active model"; show the model that answered last.
+  const activeModel = [...(statusQ.data?.recent_calls || [])].reverse().find((c) => c.ok)?.model;
 
   useEffect(() => {
-    if (repos.length > 0) {
-      if (!selectedRepoId) {
-        const first = repos[0];
-        const id = first.id || (first as any).repo_id;
-        setSelectedRepoId(id);
-        setSelectedRepo(first);
-      } else {
-        const found = repos.find((r) => (r.id || (r as any).repo_id) === selectedRepoId);
-        if (found) {
-          setSelectedRepo(found);
-        }
-      }
+    if (repos.length === 0) return;
+    const found = repos.find((r) => r.repo_id === selectedRepoId);
+    if (found) {
+      setSelectedRepo(found);
+    } else {
+      // Nothing selected yet, or the saved repo is gone: pick the first ready one.
+      const first = repos.find((r) => r.status === 'ready') || repos[0];
+      setSelectedRepoId(first.repo_id);
+      setSelectedRepo(first);
     }
   }, [repos, selectedRepoId, setSelectedRepoId, setSelectedRepo]);
 
   function select(r: Repo) {
-    const id = r.id || (r as any).repo_id;
-    setSelectedRepoId(id);
+    setSelectedRepoId(r.repo_id);
     setSelectedRepo(r);
     setOpen(false);
   }
@@ -70,6 +75,10 @@ export default function Topbar() {
         padding: '0 32px',
         flexShrink: 0,
         position: 'relative',
+        // .glass clips its children and its blur makes a new stacking context:
+        // let the repo dropdown overflow, and keep the bar above the page content.
+        overflow: 'visible',
+        zIndex: 30,
       }}
     >
       {/* Repo selector */}
@@ -123,6 +132,10 @@ export default function Topbar() {
                 maxHeight: 240,
                 overflow: 'auto',
                 padding: 6,
+                // A blur nested inside the bar's blur cannot see the page behind it, so use
+                // a near-opaque fill instead of relying on backdrop-filter.
+                background: 'rgba(22,22,26,.96)',
+                animation: 'dropdownIn 0.16s ease-out both',
               }}
             >
               {repos.length === 0 && (
@@ -131,7 +144,7 @@ export default function Topbar() {
                 </div>
               )}
               {repos.map((r) => {
-                const rId = r.id || (r as any).repo_id;
+                const rId = r.repo_id;
                 const isCur = rId === selectedRepoId;
                 return (
                   <button
@@ -180,6 +193,7 @@ export default function Topbar() {
           }}
         >
           <span
+            className={backendOk && !USE_MOCK ? 'live-dot' : undefined}
             style={{
               width: 7,
               height: 7,
@@ -191,7 +205,7 @@ export default function Topbar() {
           />
           {badge}
         </span>
-        {statusQ.data?.activeModel && (
+        {activeModel && (
           <span
             style={{
               padding: '5px 12px',
@@ -203,7 +217,7 @@ export default function Topbar() {
               fontFamily: 'JetBrains Mono, monospace',
             }}
           >
-            {statusQ.data.activeModel}
+            {activeModel}
           </span>
         )}
       </div>

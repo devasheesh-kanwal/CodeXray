@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '../api/client';
+import { apiFetch, apiPost } from '../api/client';
 import { useRepo } from '../context/RepoContext';
-import { Loading, ErrorBanner } from '../components/shared/States';
-import type { Repo, IndexStatus } from '../api/types';
+import { Loading, ApiErrorView } from '../components/shared/States';
+import type { Repo, IndexStatus, AddRepoRequest, AddRepoResponse } from '../api/types';
 import { ArrowRight, Check, FolderGit2 } from 'lucide-react';
 
-const STAGES = ['cloning', 'parsing', 'graph', 'embedding', 'summaries', 'ready'] as const;
+// Stage order from docs/API.md. cloning only runs for git URLs, summaries only when enabled.
+const STAGES = ['queued', 'cloning', 'parsing', 'graph', 'bm25', 'embedding', 'summaries', 'ready'] as const;
 
 /* ── Shared inline style tokens ─────────────────────────────── */
 const T = {
@@ -90,25 +91,36 @@ export default function ReposPage() {
   const [gitUrl, setGitUrl] = useState('');
   const [localPath, setLocalPath] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+  const { setSelectedRepoId } = useRepo();
 
   const addMut = useMutation({
-    mutationFn: (body: any) => apiFetch<Repo>('/api/repos', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['repos'] }); setError(null); setGitUrl(''); setLocalPath(''); },
-    onError: (e: any) => setError(e.message || 'Failed to add repo'),
+    mutationFn: (body: AddRepoRequest) => apiPost<AddRepoResponse>('/api/repos', body),
+    onSuccess: (res) => {
+      // Show the new repo right away: select it, refresh the list and its status, scroll to it.
+      setSelectedRepoId(res.repo_id);
+      setJustAdded(res.repo_id);
+      qc.invalidateQueries({ queryKey: ['repos'] });
+      qc.invalidateQueries({ queryKey: ['repo-status', res.repo_id] });
+      setError(null);
+      setGitUrl('');
+      setLocalPath('');
+    },
   });
 
   function submit() {
+    setJustAdded(null);
     if (tab === 'git') {
       if (!gitUrl.trim()) { setError('Git URL required'); return; }
-      addMut.mutate({ url: gitUrl.trim() });
+      addMut.mutate({ git_url: gitUrl.trim() });
     } else {
       if (!localPath.trim()) { setError('Local path required'); return; }
-      addMut.mutate({ localPath: localPath.trim() });
+      addMut.mutate({ local_path: localPath.trim() });
     }
   }
 
   if (reposQ.isLoading) return <Loading />;
-  if (reposQ.isError) return <ErrorBanner message={(reposQ.error as Error).message} onRetry={() => reposQ.refetch()} />;
+  if (reposQ.isError) return <ApiErrorView error={reposQ.error} onRetry={() => reposQ.refetch()} />;
 
   return (
     <div style={{ fontFamily: 'Inter, sans-serif' }}>
@@ -158,6 +170,12 @@ export default function ReposPage() {
         )}
 
         {error && <p style={{ color: '#FF9E9E', fontSize: 12, marginBottom: 12 }}>{error}</p>}
+        {addMut.isError && <div style={{ marginBottom: 12 }}><ApiErrorView error={addMut.error} /></div>}
+        {justAdded && !addMut.isError && (
+          <p style={{ color: '#30a46c', fontSize: 12, marginBottom: 12, fontFamily: 'JetBrains Mono, monospace' }}>
+            Added {justAdded}. Indexing started, and it is now the selected repo.
+          </p>
+        )}
 
         <button type="button" onClick={submit} disabled={addMut.isPending}
           style={{ ...T.btnPrimary, opacity: addMut.isPending ? 0.5 : 1 }}>
@@ -182,39 +200,49 @@ export default function ReposPage() {
 
       {/* Repos List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {reposQ.data?.map((r) => {
-          const rId = r.id || (r as any).repo_id;
-          return <RepoCard key={rId} repo={r} />;
-        })}
+        {reposQ.data?.map((r) => (
+          <RepoCard key={r.repo_id} repo={r} highlight={r.repo_id === justAdded} />
+        ))}
       </div>
     </div>
   );
 }
 
-function RepoCard({ repo }: { repo: Repo }) {
-  const repoId = repo.id || (repo as any).repo_id;
+function RepoCard({ repo, highlight }: { repo: Repo; highlight: boolean }) {
+  const repoId = repo.repo_id;
   const { selectedRepoId, setSelectedRepoId, setSelectedRepo } = useRepo();
   const isSelected = selectedRepoId === repoId;
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (highlight) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlight]);
 
   const statusQ = useQuery({
     queryKey: ['repo-status', repoId],
     queryFn: () => apiFetch<IndexStatus>(`/api/repos/${repoId}/status`),
-    refetchInterval: repo.status !== 'ready' && repo.status !== 'error' ? 1000 : false,
+    // Poll every 1.5 s until indexing finishes, based on the latest status.
+    refetchInterval: (q) => {
+      const s = q.state.data?.stage ?? repo.status;
+      return s === 'ready' || s === 'failed' ? false : 1500;
+    },
   });
 
   const stage = statusQ.data?.stage || repo.status;
-  const idx = STAGES.indexOf(stage as any);
-  const isIndexing = stage !== 'ready' && stage !== 'error';
+  const idx = STAGES.indexOf(stage as (typeof STAGES)[number]);
+  const failed = stage === 'failed';
+  const isIndexing = stage !== 'ready' && !failed;
 
-  const rawProgress = statusQ.data?.progress ?? (idx >= 0 ? Math.round(((idx + 1) / STAGES.length) * 100) : 40);
-  const filesTotal = (statusQ.data as any)?.files_total ?? repo.totalFiles ?? 48;
-  const filesDone = (statusQ.data as any)?.files_done ?? Math.min(filesTotal, Math.round((rawProgress / 100) * filesTotal));
+  const filesTotal = statusQ.data?.files_total ?? repo.files_total;
+  const filesDone = statusQ.data?.files_done ?? 0;
 
   const cardStyle: React.CSSProperties = {
     background: isSelected ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.055)',
     backdropFilter: 'blur(22px) saturate(160%)',
     WebkitBackdropFilter: 'blur(22px) saturate(160%)',
-    border: isSelected
+    border: highlight
+      ? '1px solid rgba(48,164,108,.6)'
+      : isSelected
       ? '1px solid rgba(217,160,102,.45)'
       : '1px solid rgba(255,255,255,.12)',
     boxShadow: isSelected
@@ -230,6 +258,7 @@ function RepoCard({ repo }: { repo: Repo }) {
 
   return (
     <div
+      ref={ref}
       onClick={() => { setSelectedRepoId(repoId); setSelectedRepo(repo); }}
       style={cardStyle}
       className="glass-card"
@@ -239,7 +268,8 @@ function RepoCard({ repo }: { repo: Repo }) {
         <div>
           <h2 className="card-title" style={{ marginBottom: 4 }}>{repo.name}</h2>
           <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'rgba(143,168,160,.5)' }}>
-            {repo.url || repo.localPath}
+            {repo.repo_id} · {filesTotal} files
+            {statusQ.data?.search_mode && ` · search: ${statusQ.data.search_mode}`}
           </span>
         </div>
         {stage === 'ready' ? (
@@ -248,6 +278,12 @@ function RepoCard({ repo }: { repo: Repo }) {
             fontSize: 11, letterSpacing: '0.14em', fontFamily: 'Inter, sans-serif',
             fontWeight: 600, padding: '2px 10px', borderRadius: 999, textTransform: 'uppercase',
           }}>READY</span>
+        ) : failed ? (
+          <span style={{
+            background: '#DC1F1F', color: '#fff',
+            fontSize: 11, letterSpacing: '0.14em', fontFamily: 'Inter, sans-serif',
+            fontWeight: 600, padding: '2px 10px', borderRadius: 999, textTransform: 'uppercase',
+          }}>FAILED</span>
         ) : (
           <span style={{
             border: '1px solid rgba(220,31,31,.5)', color: '#DC1F1F',
@@ -297,6 +333,12 @@ function RepoCard({ repo }: { repo: Repo }) {
         })}
       </div>
 
+      {failed && (
+        <p style={{ marginTop: 16, fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: '#FF9E9E' }}>
+          {statusQ.data?.error || 'Indexing failed.'}
+        </p>
+      )}
+
       {/* Progress bar */}
       {isIndexing && (
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,.08)' }}>
@@ -309,7 +351,7 @@ function RepoCard({ repo }: { repo: Repo }) {
               height: '100%',
               background: 'linear-gradient(90deg, #D9A066, #DC1F1F)',
               borderRadius: 999,
-              width: `${Math.min(100, Math.round((filesDone / filesTotal) * 100))}%`,
+              width: `${filesTotal ? Math.min(100, Math.round((filesDone / filesTotal) * 100)) : 0}%`,
               transition: 'width 0.4s ease',
             }} />
           </div>

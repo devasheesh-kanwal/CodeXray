@@ -1,28 +1,28 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { streamPost, apiFetch } from '../api/client';
 import { useRepo } from '../context/RepoContext';
-import { Loading, EmptyState } from '../components/shared/States';
+import { Loading, EmptyState, ApiErrorView } from '../components/shared/States';
 import { ProviderBadge, CachedBadge } from '../components/shared/Badges';
 import { CodeViewer } from '../components/shared/CodeViewer';
 import ReactMarkdown from 'react-markdown';
-import type { Citation, AskResponse, Repo } from '../api/types';
+import type { AskFinal, FileSlice, Repo } from '../api/types';
 import { Send, Square, Sparkles, FileCode } from 'lucide-react';
 
 type Msg = {
   role: 'user' | 'assistant';
   content: string;
-  meta?: {
-    citations: Citation[];
-    confidence: number;
-    provider: string;
-    model: string;
-    cached: boolean;
-    not_found: boolean;
-  };
+  meta?: AskFinal;
+  error?: unknown;
 };
 
-const CITATION_RE = /\[([^\]]+?):(\d+)-(\d+)\]/g;
+// Marker regex from docs/API.md. Parse it on the full text, not on single tokens.
+const CITATION_RE = /\[([^[\]:]+):(\d+)-(\d+)\]/g;
+// Models sometimes group references: [a.py:1-2, b.py:5-9] -> [a.py:1-2] [b.py:5-9] (the backend does the same).
+const GROUPED_RE = /\[([^[\]:,;]+:\d+-\d+(?:\s*[,;]\s*[^[\]:,;]+:\d+-\d+)+)\]/g;
+const splitGroups = (text: string) =>
+  text.replace(GROUPED_RE, (_, refs: string) => refs.split(/[,;]/).map((r) => `[${r.trim()}]`).join(' '));
+const NOT_FOUND_TEXT = 'No relevant code found for this question';
 
 const SUGGESTED = [
   'How does user login work?',
@@ -59,8 +59,11 @@ const glassDense: React.CSSProperties = {
 
 export default function AskPage() {
   const { selectedRepoId, setSelectedRepoId, setSelectedRepo } = useRepo();
-  const [messages, setMessages] = useState<Msg[]>([]);
-  const historyRef = useRef<Record<string, Msg[]>>({});
+  // One chat per repo. Each update names its repo, so an answer always lands in the
+  // chat it was asked in (two save/load effects used to copy chats between repos).
+  const [chats, setChats] = useState<Record<string, Msg[]>>({});
+  const messages = useMemo(() => (selectedRepoId && chats[selectedRepoId]) || [], [chats, selectedRepoId]);
+  const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const reposQ = useQuery({
@@ -68,155 +71,81 @@ export default function AskPage() {
     queryFn: () => apiFetch<Repo[]>('/api/repos'),
   });
 
-  // Auto-select repo if not already set
-  useEffect(() => {
-    if (!selectedRepoId && reposQ.data && reposQ.data.length > 0) {
-      const first = reposQ.data[0];
-      const id = first.id || (first as any).repo_id;
-      setSelectedRepoId(id);
-      setSelectedRepo(first);
-    }
-  }, [selectedRepoId, reposQ.data, setSelectedRepoId, setSelectedRepo]);
-
-  useEffect(() => {
-    if (selectedRepoId) historyRef.current[selectedRepoId] = messages;
-  }, [messages, selectedRepoId]);
-
-  const prevRepoRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (selectedRepoId) setMessages(historyRef.current[selectedRepoId] || []);
-    prevRepoRef.current = selectedRepoId;
-  }, [selectedRepoId]);
+  // Switching repos or leaving the page stops a running answer (and its LLM calls).
+  useEffect(() => () => abortRef.current?.abort(), [selectedRepoId]);
 
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<{ agent: string; status: string } | null>(null);
-  const [aborter, setAborter] = useState<AbortController | null>(null);
   const [viewFile, setViewFile] = useState<{ path: string; start: number; end: number } | null>(null);
 
   const fileQ = useQuery({
     queryKey: ['file', selectedRepoId, viewFile?.path],
     queryFn: () =>
-      apiFetch<{ path: string; content?: string; lines?: string[] }>(
-        `/api/repos/${selectedRepoId}/file?path=${encodeURIComponent(viewFile!.path)}`,
-      ),
+      apiFetch<FileSlice>(`/api/repos/${selectedRepoId}/file?path=${encodeURIComponent(viewFile!.path)}`),
     enabled: !!selectedRepoId && !!viewFile,
   });
 
-  const fileCode = fileQ.data
-    ? fileQ.data.content ?? (Array.isArray(fileQ.data.lines) ? fileQ.data.lines.join('\n') : '')
-    : '';
+  const fileCode = fileQ.data ? fileQ.data.lines.join('\n') : '';
 
   // Scroll to bottom on new messages or agent changes
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentAgent]);
 
+  function updateChat(repo: string, change: (m: Msg[]) => Msg[]) {
+    setChats((all) => ({ ...all, [repo]: change(all[repo] || []) }));
+  }
+
   async function send(q?: string) {
     const question = (q ?? input).trim();
     if (!question || streaming || !selectedRepoId) return;
+    const repo = selectedRepoId;
+    const updateLast = (change: (m: Msg) => Msg) => updateChat(repo, (m) => [...m.slice(0, -1), change(m[m.length - 1])]);
     setInput('');
-    const userMsg: Msg = { role: 'user', content: question };
-    setMessages((m) => [...m, userMsg, { role: 'assistant', content: '' }]);
+    updateChat(repo, (m) => [...m, { role: 'user', content: question }, { role: 'assistant', content: '' }]);
     setStreaming(true);
-    setCurrentAgent({ agent: 'Architect', status: 'searching code and symbol graph…' });
+    setCurrentAgent({ agent: 'architect', status: 'starting' });
 
     const ctrl = new AbortController();
-    setAborter(ctrl);
+    abortRef.current = ctrl;
 
     try {
       await streamPost(
-        '/api/ask',
-        { repoId: selectedRepoId, question },
+        `/api/repos/${repo}/ask/stream`,
+        { question },
         (ev) => {
-          if (ev.type === 'agent_status') {
-            setCurrentAgent({ agent: ev.agent, status: ev.status });
-          } else if (ev.type === 'token') {
-            setMessages((m) => {
-              const c = [...m];
-              const last = c[c.length - 1];
-              if (last && last.role === 'assistant') {
-                c[c.length - 1] = { ...last, content: last.content + ev.text };
-              }
-              return c;
-            });
-          } else if (ev.type === 'meta') {
-            setMessages((m) => {
-              const c = [...m];
-              const last = c[c.length - 1];
-              if (last && last.role === 'assistant') {
-                c[c.length - 1] = {
-                  ...last,
-                  meta: {
-                    citations: ev.citations,
-                    confidence: ev.confidence,
-                    provider: ev.provider,
-                    model: ev.model,
-                    cached: ev.cached,
-                    not_found: ev.not_found,
-                  },
-                };
-              }
-              return c;
-            });
-          } else if (ev.type === 'done') {
+          if (ev.event === 'agent') {
+            setCurrentAgent({ agent: ev.data.agent, status: ev.data.detail || ev.data.status });
+          } else if (ev.event === 'token') {
             setCurrentAgent(null);
+            updateLast((m) => ({ ...m, content: m.content + ev.data.text }));
+          } else if (ev.event === 'final') {
+            updateLast((m) => ({ ...m, meta: ev.data }));
+          } else if (ev.event === 'error') {
+            updateLast((m) => ({ ...m, error: new Error(ev.data.message) }));
           }
         },
         ctrl.signal,
       );
-    } catch {
-      // Fallback to non-streaming POST
-      try {
-        const resp = await apiFetch<AskResponse>('/api/ask', {
-          method: 'POST',
-          body: JSON.stringify({ repoId: selectedRepoId, question }),
-        });
-        const mappedCitations: Citation[] = (resp.citations || []).map((c: any) => ({
-          file: c.file,
-          start: c.start ?? c.start_line ?? 1,
-          end: c.end ?? c.end_line ?? (c.start ?? c.start_line ?? 1),
-          start_line: c.start_line ?? c.start,
-          end_line: c.end_line ?? c.end,
-          why: c.why,
-        }));
-        setMessages((m) => {
-          const c = [...m];
-          c[c.length - 1] = {
-            role: 'assistant',
-            content: resp.answer,
-            meta: {
-              citations: mappedCitations,
-              confidence: resp.confidence,
-              provider: resp.provider,
-              model: resp.model,
-              cached: resp.cached,
-              not_found: resp.not_found,
-            },
-          };
-          return c;
-        });
-      } catch (e2) {
-        setMessages((m) => {
-          const c = [...m];
-          c[c.length - 1] = { role: 'assistant', content: 'Error: ' + (e2 as Error).message };
-          return c;
-        });
-      }
+    } catch (e) {
+      // 404/409/422 come back as JSON errors before the stream starts; show them in the chat.
+      if ((e as Error).name !== 'AbortError') updateLast((m) => ({ ...m, error: e }));
     } finally {
       setStreaming(false);
       setCurrentAgent(null);
-      setAborter(null);
+      if (abortRef.current === ctrl) abortRef.current = null;
     }
   }
 
   function stop() {
-    aborter?.abort();
+    abortRef.current?.abort();
     setStreaming(false);
     setCurrentAgent(null);
   }
 
   function renderContent(msg: Msg) {
+    if (msg.error) return <ApiErrorView error={msg.error} />;
     if (msg.meta?.not_found) {
       return (
         <div
@@ -230,12 +159,21 @@ export default function AskPage() {
             fontFamily: 'Inter, sans-serif',
           }}
         >
-          No relevant code found in this repo.
+          {NOT_FOUND_TEXT}
         </div>
       );
     }
+    if (!msg.content) {
+      return (
+        <span className="typing-dots" role="status" aria-label="thinking">
+          <i /><i /><i />
+        </span>
+      );
+    }
 
-    const parts = msg.content.split(CITATION_RE);
+    // Only markers listed in final.citations are verified; others stay plain text.
+    const verified = new Set((msg.meta?.citations || []).map((c) => `${c.file}:${c.start_line}-${c.end_line}`));
+    const parts = splitGroups(msg.content).split(CITATION_RE);
     const nodes: React.ReactNode[] = [];
     for (let i = 0; i < parts.length; i += 4) {
       const text = parts[i];
@@ -244,6 +182,15 @@ export default function AskPage() {
         const file = parts[i + 1];
         const start = parseInt(parts[i + 2], 10);
         const end = parseInt(parts[i + 3], 10);
+        const key = `${file}:${start}-${end}`;
+        if (!verified.has(key)) {
+          nodes.push(
+            <span key={'c' + i} style={{ margin: '0 4px', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: 'rgba(143,168,160,.5)' }}>
+              [{key}]
+            </span>,
+          );
+          continue;
+        }
         nodes.push(
           <button
             key={'c' + i}
@@ -265,10 +212,10 @@ export default function AskPage() {
               cursor: 'pointer',
               transition: 'background 0.15s, transform 0.1s',
             }}
-            title={`Click to inspect ${file}:${start}-${end}`}
+            title={`Click to inspect ${key}`}
           >
             <FileCode size={11} />
-            {file}:{start}-{end}
+            {key}
           </button>,
         );
       }
@@ -324,7 +271,7 @@ export default function AskPage() {
           {repos.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
               {repos.map((r) => {
-                const rId = r.id || (r as any).repo_id;
+                const rId = r.repo_id;
                 return (
                   <button
                     key={rId}
@@ -394,6 +341,7 @@ export default function AskPage() {
               }}
             >
               <span
+                className="pulse-dot"
                 style={{
                   width: 8,
                   height: 8,
@@ -440,7 +388,11 @@ export default function AskPage() {
               </div>
             )}
             {messages.map((m, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div
+                key={i}
+                className={m.role === 'user' ? 'msg-in-user' : 'msg-in-bot'}
+                style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}
+              >
                 <div
                   style={{
                     maxWidth: '88%',
@@ -469,7 +421,7 @@ export default function AskPage() {
                         confidence {Math.round(m.meta.confidence * 100)}%
                       </span>
                       <ProviderBadge provider={m.meta.provider} model={m.meta.model} />
-                      <CachedBadge cached={m.meta.cached} />
+                      <CachedBadge cached={!!m.meta.cached} />
                     </div>
                   )}
                 </div>
@@ -565,6 +517,8 @@ export default function AskPage() {
           {viewFile ? (
             fileQ.isLoading ? (
               <Loading />
+            ) : fileQ.isError ? (
+              <ApiErrorView error={fileQ.error} onRetry={() => fileQ.refetch()} />
             ) : fileQ.data ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
                 <div
@@ -588,6 +542,7 @@ export default function AskPage() {
                 <div style={{ flex: 1, overflow: 'auto' }}>
                   <CodeViewer
                     code={fileCode}
+                    language="python"
                     highlightLines={Array.from(
                       { length: viewFile.end - viewFile.start + 1 },
                       (_, i) => viewFile.start + i,

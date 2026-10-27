@@ -1,17 +1,17 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
+import type { Health } from '../../api/types';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import AppBackground from './AppBackground';
 import { RepoProvider } from '../../context/RepoContext';
-import { ErrorBanner } from '../../components/shared/States';
-
-const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+import { ApiErrorView } from '../../components/shared/States';
 
 export default function Shell({ children }: { children?: React.ReactNode }) {
-  const health = useQuery({ queryKey: ['llm-status'], queryFn: () => apiFetch('/api/llm/status'), retry: 1 });
-  const showBanner = !USE_MOCK && health.isError;
+  const health = useQuery({ queryKey: ['health'], queryFn: () => apiFetch<Health>('/api/health'), retry: 1, refetchInterval: 15000 });
+  const showBanner = health.isError;
+  const { pathname } = useLocation();
 
   return (
     <RepoProvider>
@@ -29,7 +29,7 @@ export default function Shell({ children }: { children?: React.ReactNode }) {
           <Topbar />
           {showBanner && (
             <div style={{ padding: '12px 24px' }}>
-              <ErrorBanner message="Backend unreachable" onRetry={() => health.refetch()} />
+              <ApiErrorView error={health.error} onRetry={() => health.refetch()} />
             </div>
           )}
           <main
@@ -40,7 +40,8 @@ export default function Shell({ children }: { children?: React.ReactNode }) {
               padding: '32px',
             }}
           >
-            <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+            {/* keyed by route so the page-enter motion replays on every navigation */}
+            <div key={pathname} style={{ maxWidth: 1280, margin: '0 auto' }}>
               {children ?? <Outlet />}
             </div>
           </main>

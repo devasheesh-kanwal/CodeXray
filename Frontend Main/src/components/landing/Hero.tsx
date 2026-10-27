@@ -126,7 +126,7 @@ export default function Hero() {
           {/* animated headline + mint line */}
           <div key={index} style={{ animation: reduce ? 'none' : 'heroSlideIn 0.5s ease-out both' }}>
             <h1
-              className="font-display font-black uppercase text-hero-red leading-[.9] tracking-[-0.01em] whitespace-nowrap"
+              className="font-heading font-extrabold uppercase text-hero-red leading-[.9] tracking-[0.02em] whitespace-nowrap"
               style={{
                 fontSize: 'clamp(3rem, min(7vw, 13vh), 7.5rem)',
                 textShadow: '0 2px 24px rgba(0,0,0,.45)',

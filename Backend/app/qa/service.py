@@ -107,7 +107,9 @@ def _architect_model(state: RunState) -> dict:
     """Provider and model for answers the Explainer never wrote."""
     used = state.models_used.get("architect") or ["none/none"]
     provider, _, model = used[-1].partition("/")
-    return {"provider": provider, "model": model, "cached": False}
+    # Cached only if the Architect really answered and every one of its replies was a cache hit.
+    cached = bool(state.models_used.get("architect")) and not state.uncached_calls.get("architect")
+    return {"provider": provider, "model": model, "cached": cached}
 
 
 def _run_error(state: RunState) -> ApiError:

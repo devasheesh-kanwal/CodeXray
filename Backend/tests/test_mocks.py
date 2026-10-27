@@ -17,7 +17,7 @@ from app.api.schemas.repos import (
     RulesResponse,
     TreeNode,
 )
-from app.api.schemas.repair import RepairRun, RepairStarted
+from app.api.schemas.repair import RepairStarted
 from app.api.schemas.review import ReviewResponse
 from app.mocks.loader import FIXTURE_MODELS, FIXTURES_DIR, get_fixture
 

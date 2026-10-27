@@ -14,7 +14,7 @@ from pathlib import Path
 from app.agents.coordinator import Coordinator
 from app.agents.state import RunEvent, RunState
 from app.agents.tools import ToolRegistry
-from app.api.schemas.repair import EvalResult, RepairEvent, RepairRun
+from app.api.schemas.repair import EvalResult, RepairEvent, RepairRun, ReproTest
 from app.api.sse import sse_event
 from app.config import Settings
 from app.errors import ApiError, not_found
@@ -39,6 +39,7 @@ STATE_MESSAGES = {
     "BASELINE": "Running the tests on the current checkout to confirm the failure.",
     "PLANNING": "Architect is picking the files to change.",
     "BRANCHED": "Creating a git worktree branch for the fix.",
+    "REPRODUCING": "No test shows the bug yet: the Test writer is writing a reproduction test.",
     "DIAGNOSING": "Debugger is looking for the root cause.",
     "PATCHING": "Repair agent is writing a patch.",
     "TESTING": "Running the tests on the patched branch.",
@@ -72,6 +73,28 @@ class RepairService:
         self.active: dict[str, str] = {}  # repo_id -> run_id
         self.live: dict[str, RunState] = {}  # run_id -> state, while the server runs
         self.tasks: dict[str, asyncio.Task] = {}
+
+    def recover(self) -> None:
+        """At startup: a run the last server left mid-way can never finish, so it becomes
+        FAILED and its branch and worktree are removed; a run awaiting approval takes
+        its repo's lock again (one repair per repo survives a restart)."""
+        runs_dir = self.settings.data_path / "runs"
+        for path in sorted(runs_dir.glob("run_*.json")):
+            try:
+                state = RunState.load(runs_dir, path.stem)
+            except ValueError:  # an unreadable or older-format run file
+                logger.warning("Skipping unreadable run file %s", path.name)
+                continue
+            if state is None or state.workflow != "repair":
+                continue
+            if state.status == "running":
+                state.status = "failed"
+                state.stop_reason = "interrupted by a server restart"
+                state.emit("run_finished", "run failed: interrupted by a server restart",
+                           status="failed", reason=state.stop_reason)
+                self._cleanup(state)
+            elif api_state(state) == "AWAITING_APPROVAL":
+                self.active.setdefault(state.repo_id, state.run_id)
 
     # ---------- start ----------
 
@@ -185,6 +208,7 @@ class RepairService:
             eval=EvalResult.model_validate(a["eval"]) if a.get("eval") else None,
             reviewer_notes=reviewer_notes(a.get("review")),
             root_cause=(a.get("hypothesis") or {}).get("root_cause"),
+            repro_test=ReproTest(path=a["repro"]["path"], code=a["repro"]["code"]) if a.get("repro") else None,
             events=to_repair_events(state),
         )
 

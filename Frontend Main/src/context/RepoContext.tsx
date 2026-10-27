@@ -1,5 +1,7 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useState } from 'react';
 import type { Repo } from '../api/types';
+
+const STORAGE_KEY = 'codexray_selected_repo_id';
 
 type Ctx = {
   selectedRepoId: string | null;
@@ -18,41 +20,27 @@ const RepoContext = createContext<Ctx>({
 export const useRepo = () => useContext(RepoContext);
 
 export function RepoProvider({ children }: { children: React.ReactNode }) {
-  const [selectedRepoId, setSelectedRepoIdState] = useState<string | null>(() => {
+  // The selected repo survives a page reload (per-browser convenience only).
+  const [selectedRepoId, setIdState] = useState<string | null>(() => {
     try {
-      return localStorage.getItem('codexray_selected_repo_id');
+      return localStorage.getItem(STORAGE_KEY);
     } catch {
       return null;
     }
   });
   const [selectedRepo, setSelectedRepoState] = useState<Repo | null>(null);
 
-  const setSelectedRepoId = (id: string | null) => {
-    setSelectedRepoIdState(id);
+  const setSelectedRepoId = useCallback((id: string | null) => {
+    setIdState(id);
     try {
-      if (id) {
-        localStorage.setItem('codexray_selected_repo_id', id);
-      } else {
-        localStorage.removeItem('codexray_selected_repo_id');
-      }
-    } catch {}
-  };
-
-  const setSelectedRepo = (r: Repo | null) => {
-    if (r) {
-      const normalized: Repo = {
-        ...r,
-        id: r.id || (r as any).repo_id,
-        repo_id: (r as any).repo_id || r.id,
-      };
-      setSelectedRepoState(normalized);
-      if (normalized.id && !selectedRepoId) {
-        setSelectedRepoId(normalized.id);
-      }
-    } else {
-      setSelectedRepoState(null);
+      if (id) localStorage.setItem(STORAGE_KEY, id);
+      else localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // storage unavailable (private window); the selection just won't persist
     }
-  };
+  }, []);
+
+  const setSelectedRepo = useCallback((r: Repo | null) => setSelectedRepoState(r), []);
 
   return (
     <RepoContext.Provider value={{ selectedRepoId, setSelectedRepoId, selectedRepo, setSelectedRepo }}>
@@ -60,4 +48,3 @@ export function RepoProvider({ children }: { children: React.ReactNode }) {
     </RepoContext.Provider>
   );
 }
-

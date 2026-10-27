@@ -1,137 +1,151 @@
-export type Repo = {
-  id: string;
-  repo_id?: string;
-  name: string;
-  url?: string;
-  localPath?: string;
-  local_path?: string;
-  status: 'cloning' | 'parsing' | 'graph' | 'embedding' | 'summaries' | 'ready' | 'error' | 'failed' | 'queued' | 'bm25';
-  filesDone?: number;
-  totalFiles?: number;
-  files_done?: number;
-  files_total?: number;
-  createdAt?: string;
-};
+// Types for the CodeXray backend API. Source of truth: Backend/docs/API.md.
+// Fields the doc marks with `?` (may be null) are typed `T | null`.
 
+export type IndexStage =
+  | 'queued' | 'cloning' | 'parsing' | 'graph' | 'bm25' | 'embedding' | 'summaries' | 'ready' | 'failed';
+
+export type Health = { status: string; version: string; mock_mode: boolean; demo_mode: boolean };
+
+export type Repo = { repo_id: string; name: string; status: IndexStage; files_total: number };
+
+export type AddRepoRequest = { git_url: string } | { local_path: string };
+export type AddRepoResponse = { repo_id: string; status: IndexStage };
 
 export type IndexStatus = {
-  stage: 'cloning' | 'parsing' | 'graph' | 'embedding' | 'summaries' | 'ready' | 'error' | 'failed' | 'queued' | 'bm25';
-  message?: string;
-  progress?: number;
-  filesDone?: number;
-  totalFiles?: number;
+  stage: IndexStage;
+  files_done: number;
+  files_total: number;
+  error: string | null;
+  chunks_total: number | null;
+  chunks_embedded: number | null;
+  search_mode: 'hybrid' | 'bm25_only' | null;
 };
 
 export type CodeSymbol = {
   name: string;
-  kind: 'function' | 'class';
-  startLine: number;
-  endLine: number;
+  kind: 'class' | 'function' | 'method';
+  start_line: number;
+  end_line: number;
+  children: CodeSymbol[];
 };
 
-export type FileNode = {
-  path: string;
+export type TreeNode = {
   name: string;
-  type: 'file' | 'dir';
-  symbols?: CodeSymbol[];
-  children?: FileNode[];
+  path: string;
+  type: 'folder' | 'file';
+  children: TreeNode[];
+  symbols: CodeSymbol[];
 };
 
-export type GraphNode = { id: string; label: string; type?: string };
-export type GraphEdge = { source: string; target: string; kind: 'import' | 'call' };
+export type TreeResponse = { repo_id: string; root: TreeNode };
+
+export type GraphNode = { id: string; label: string; type: 'file' | 'class' | 'function'; file: string };
+export type GraphEdge = { source: string; target: string; type: 'imports' | 'contains' | 'calls' };
 export type GraphData = { nodes: GraphNode[]; edges: GraphEdge[] };
 
-export type CodeRange = { file: string; start: number; end: number };
+export type FileSlice = { path: string; start: number; end: number; lines: string[] };
 
-export type Citation = { file: string; start: number; end: number };
+export type AgentTraceStep = { agent: string; step: number; action: string; summary: string; ms: number };
 
-export type AgentStep = {
-  agent: string;
-  action: string;
-  durationMs?: number;
-};
+export type Citation = { file: string; start_line: number; end_line: number; why: string };
 
 export type AskResponse = {
   answer: string;
   citations: Citation[];
   confidence: number;
+  not_found: boolean;
   provider: string;
   model: string;
   cached: boolean;
-  not_found: boolean;
-  steps?: AgentStep[];
+  agent_trace: AgentTraceStep[] | null;
 };
 
+export type AskFinal = Omit<AskResponse, 'answer' | 'cached'> & { cached?: boolean };
+
 export type AskStreamEvent =
-  | { type: 'agent_status'; agent: string; status: string }
-  | { type: 'token'; text: string }
-  | { type: 'meta'; citations: Citation[]; confidence: number; provider: string; model: string; cached: boolean; not_found: boolean; steps?: AgentStep[] }
-  | { type: 'done' }
-  | { type: 'error'; message: string };
+  | { event: 'agent'; data: { agent: string; status: 'running' | 'done' | 'failed'; detail?: string | null } }
+  | { event: 'token'; data: { text: string } }
+  | { event: 'final'; data: AskFinal }
+  | { event: 'done'; data: Record<string, never> }
+  | { event: 'error'; data: ErrorBody };
 
 export type Finding = {
   id: string;
-  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  category: 'bug' | 'security' | 'practice' | 'design';
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  file: string;
+  line: number;
+  title: string;
+  explanation: string;
+  suggested_fix: string;
+  source: 'llm' | 'ruff' | 'bandit' | 'rule';
+  confidence: number;
+};
+
+export type ReviewRequest = { diff_text: string } | { base_branch: string; head_branch: string };
+
+export type ReviewResponse = { summary: string; findings: Finding[]; agent_trace: AgentTraceStep[] | null };
+
+export type Rule = {
+  id: string;
   title: string;
   description: string;
-  file?: string;
-  line?: number;
-  source: 'design' | 'security' | 'performance' | 'style' | 'bug' | 'practice';
-  suggested_fix: string;
-  breaks_design?: boolean;
+  severity: Finding['severity'];
+  enabled: boolean;
 };
 
-export type PRReview = {
-  summary: string;
-  counts?: {
-    bug: number;
-    security: number;
-    practice: number;
-    design: number;
-  };
-  findings: Finding[];
-};
+export type RulesResponse = { rules: Rule[] };
 
-export type Rule = { id: string; name: string; description: string; enabled: boolean };
+export type RepairState =
+  | 'CREATED' | 'BASELINE' | 'PLANNING' | 'BRANCHED' | 'REPRODUCING' | 'DIAGNOSING' | 'PATCHING' | 'TESTING'
+  | 'EVALUATING' | 'REVIEWING' | 'AWAITING_APPROVAL' | 'MERGED' | 'REJECTED' | 'FAILED' | 'CLEANUP';
 
 export type RepairEvent = {
-  id: string;
-  type: string;
-  state: string;
+  ts: string;
+  state: RepairState;
+  attempt: number;
+  agent: string | null;
+  kind: 'state' | 'agent' | 'tests' | 'eval' | 'note' | 'error';
   message: string;
-  attempt?: number;
-  agent?: 'Architect' | 'Debug' | 'Reviewer' | 'plain' | 'Test Runner';
-  status: 'running' | 'pass' | 'fail' | 'pending' | 'merged' | 'deleted';
-  timestamp: string;
-  diff?: string;
-  eval?: { name: string; pass: boolean }[];
-  reviewerOpinion?: string;
+  data: Record<string, unknown>;
 };
 
+export type EvalCheck = { name: string; passed: boolean; detail: string };
+
+/** The test CodeXray wrote when no existing test showed the bug; the fix is judged against it. */
+export type ReproTest = { path: string; code: string };
+
 export type RepairRun = {
-  id: string;
-  repoId: string;
-  status: 'running' | 'awaiting_approval' | 'merged' | 'failed' | 'cancelled';
-  attempts: number;
-  maxAttempts: number;
-  issueDescription?: string;
-  rootCause?: string;
+  state: RepairState;
+  attempt: number;
+  max_attempts: number;
+  diff: string | null;
+  eval: { checks: EvalCheck[] } | null;
+  reviewer_notes: string | null;
+  root_cause: string | null;
+  repro_test: ReproTest | null;
   events: RepairEvent[];
-  replay?: boolean;
 };
+
+export type RepairRequest = { issue: string; test_command?: string };
+export type RepairStartResponse = { run_id: string };
 
 export type ProviderStatus = {
   name: string;
-  status: 'ok' | 'cooldown' | 'disabled';
-  cooldownUntil?: string;
-  model?: string;
+  state: 'available' | 'cooldown' | 'no_keys' | 'disabled';
+  cooldown_until: string | null;
 };
 
-export type LLMStatus = {
-  activeModel: string;
-  providers: ProviderStatus[];
-  recentCalls: { id: string; provider: string; model: string; status: string; latencyMs: number; timestamp: string; cached: boolean; switched?: boolean }[];
+export type LLMCall = {
+  lane: string;
+  provider: string;
+  model: string;
+  ok: boolean;
+  switch_reason: string | null;
+  latency_ms: number;
+  cached: boolean;
 };
 
-export type ApiError = { status: number; message: string; code?: string };
+export type LLMStatus = { providers: ProviderStatus[]; recent_calls: LLMCall[] };
 
+export type ErrorBody = { code: string; message: string; details: Record<string, unknown> };

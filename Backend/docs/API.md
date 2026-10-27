@@ -400,7 +400,8 @@ Response:
 - Every citation is verified by the backend: the file is indexed, the lines
   exist, and the range overlaps code the Explainer was given. Markers that fail
   this check are removed from `answer`, and every kept marker is written as
-  `[file:start-end]` (a model's `` `file:5` `` or `[file:5]` becomes `[file:5-5]`).
+  `[file:start-end]` (a model's `` `file:5` `` or `[file:5]` becomes `[file:5-5]`, and a
+  grouped `[a.py:1-2, b.py:5]` becomes `[a.py:1-2] [b.py:5-5]`, each checked on its own).
 - `not_found: true` means no relevant code was found. `answer` is then exactly
   `"No relevant code found for this question"`, `citations` is empty and
   `confidence` is 0.
@@ -543,6 +544,19 @@ Real mode (`MOCK_MODE=false`):
   event saying the sandbox is weaker.
 - The patch is written in a git worktree on branch `codexray/fix-<run_id>`.
   The user's checked-out branch is never changed.
+- If no test fails at baseline (the repo has no tests, or they all pass), the
+  run goes through `REPRODUCING`: the Test writer agent writes one test file,
+  `test_codexray_repro_<run_id>.py` at the repo root. It is accepted only if it
+  **fails with an assertion** on the unpatched code (not an import or
+  collection error, not a pass), with one retry. The accepted test is
+  committed on the fix branch and frozen: every attempt must make it pass
+  without changing it, and an approved repair's branch includes it. If no
+  valid test can be written, the run ends `FAILED`. Tests run with CodeXray's
+  own Python packages, not the repo's `requirements.txt`, so code that imports
+  a package CodeXray does not have cannot be tested.
+- The Reviewer is required: if no reviewer model answers (after one retry,
+  which waits for the first cooldown to end, at most 60 s), the run ends
+  `FAILED` instead of reaching `AWAITING_APPROVAL`. Its verdict stays advisory.
 
 ```json
 {"run_id": "run_8c1d2e3f"}
@@ -579,6 +593,10 @@ The run right now. In mock mode, after ~20 s:
 }
 ```
 
+- `repro_test?` is `{"path", "code"}` when CodeXray wrote a reproduction test
+  (see above), else `null`. Show it to the user: the fix is judged against it.
+  With a reproduction test, `eval.checks` has one more check,
+  `repro_test_unchanged`.
 - `diff?`, `eval?`, `reviewer_notes?`, `root_cause?` are `null` until the run
   reaches the step that produces them. After a failed attempt (`CLEANUP`),
   `diff` and `root_cause` go back to `null`, and attempt 2 fills them again.
@@ -604,7 +622,7 @@ RepairEvent fields:
 | ts | ISO-8601 UTC datetime | |
 | state | Repair state | State of the run when this happened |
 | attempt | int | 1..max_attempts |
-| agent? | string | `coordinator`, `test_runner`, `architect`, `debugger`, `repair`, `summarizer`, `eval_gate`, `reviewer` |
+| agent? | string | `coordinator`, `test_runner`, `architect`, `test_writer`, `debugger`, `repair`, `summarizer`, `eval_gate`, `reviewer` |
 | kind | `state`, `agent`, `tests`, `eval`, `note`, `error` | What kind of event |
 | message | string | One human-readable line |
 | data | object | Extra details. Keys depend on `kind` (e.g. `tests`: `passed`, `failed`, `failing`; `note`: `failure_note`, `branch_deleted`) |
@@ -687,6 +705,7 @@ answers it, even before the other features are built.
 | `BASELINE` | Running the tests before any change, to confirm the failure |
 | `PLANNING` | Architect finds the relevant code |
 | `BRANCHED` | Git worktree branch created for the attempt |
+| `REPRODUCING` | Only when no test failed at baseline: the Test writer writes a reproduction test, which must fail on the unpatched code |
 | `DIAGNOSING` | Debugger looks for the root cause (each attempt starts here) |
 | `PATCHING` | Repair agent writes a patch |
 | `TESTING` | Tests run in the sandbox |
@@ -695,7 +714,7 @@ answers it, even before the other features are built.
 | `AWAITING_APPROVAL` | Waiting for a human to approve or reject |
 | `MERGED` | Approved and merged into a local branch (final) |
 | `REJECTED` | Rejected by the human (final) |
-| `FAILED` | Gave up after `max_attempts`, or could not start: the failure does not reproduce (no test fails at baseline), the tests could not run, the run's budget ran out, or an error (final). The last `note` or `error` event's `data.reason` says why |
+| `FAILED` | Gave up after `max_attempts`, or could not start: no valid reproduction test could be written, the tests could not run, the Reviewer was unavailable, the run's budget ran out, or an error (final). The last `note` or `error` event's `data.reason` says why |
 | `CLEANUP` | An attempt failed: failure note written, branch deleted; next is `DIAGNOSING` with `attempt + 1` |
 
 ---

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api/client';
-import { Loading, ErrorBanner } from '../components/shared/States';
+import { Loading, ApiErrorView } from '../components/shared/States';
 import type { LLMStatus } from '../api/types';
 
 export default function SystemStatusPage() {
@@ -18,9 +18,10 @@ export default function SystemStatusPage() {
   }, []);
 
   if (statusQ.isLoading) return <Loading />;
-  if (statusQ.isError) return <ErrorBanner message={(statusQ.error as Error).message} onRetry={() => statusQ.refetch()} />;
+  if (statusQ.isError) return <ApiErrorView error={statusQ.error} onRetry={() => statusQ.refetch()} />;
 
   const data = statusQ.data!;
+  const lastOk = [...data.recent_calls].reverse().find((c) => c.ok);
 
   return (
     <div className="font-sans">
@@ -34,10 +35,10 @@ export default function SystemStatusPage() {
         <p style={{ color: '#8FA8A0', fontSize: 13 }}>Live LLM provider status, fallbacks, latency and cache metrics</p>
       </div>
 
-      {/* Provider cards: OK = mint, Cooldown = amber, Disabled = red */}
+      {/* Provider cards: available = mint, cooldown = amber, no_keys/disabled = red */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
         {data.providers.map((p) => {
-          const cooldownMs = p.cooldownUntil ? new Date(p.cooldownUntil).getTime() - now : 0;
+          const cooldownMs = p.cooldown_until ? new Date(p.cooldown_until).getTime() - now : 0;
           return (
             <div
               key={p.name}
@@ -50,18 +51,17 @@ export default function SystemStatusPage() {
                 </span>
                 <span
                   className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold uppercase tracking-wider ${
-                    p.status === 'ok'
+                    p.state === 'available'
                       ? 'border border-text/40 text-text'
-                      : p.status === 'cooldown'
+                      : p.state === 'cooldown'
                       ? 'bg-[rgba(217,160,102,.15)] border border-[rgba(217,160,102,.5)] text-[#D9A066]'
                       : 'border border-accent text-accent'
                   }`}
                 >
-                  {p.status}
+                  {p.state.replace('_', ' ')}
                 </span>
               </div>
-              <p className="text-xs font-mono text-text-muted">{p.model}</p>
-              {p.status === 'cooldown' && cooldownMs > 0 && (
+              {p.state === 'cooldown' && cooldownMs > 0 && (
                 <p className="text-xs font-mono text-[#D9A066] mt-2">
                   cooldown {Math.ceil(cooldownMs / 1000)}s
                 </p>
@@ -80,44 +80,49 @@ export default function SystemStatusPage() {
           <table className="w-full text-xs font-mono">
             <thead>
               <tr className="text-left text-text-muted border-b border-border section-label">
+                <th className="py-2.5 px-3">Lane</th>
                 <th className="py-2.5 px-3">Provider</th>
                 <th className="py-2.5 px-3">Model</th>
                 <th className="py-2.5 px-3">Status</th>
                 <th className="py-2.5 px-3">Latency</th>
                 <th className="py-2.5 px-3">Cached</th>
-                <th className="py-2.5 px-3">Time</th>
+                <th className="py-2.5 px-3">Switch reason</th>
               </tr>
             </thead>
             <tbody>
-              {data.recentCalls.map((c) => {
-                const switched = c.status !== 'ok';
+              {[...data.recent_calls].reverse().map((c, i) => {
+                const switched = !c.ok;
                 return (
                   <tr
-                    key={c.id}
+                    key={i}
                     className={`border-b border-border/50 transition-colors ${
                       switched ? 'bg-[rgba(217,160,102,.10)] text-[#D9A066]' : 'hover:bg-white/5 text-text'
                     }`}
                   >
+                    <td className="py-2.5 px-3 text-text-muted">{c.lane}</td>
                     <td className="py-2.5 px-3 font-medium capitalize">{c.provider}</td>
                     <td className="py-2.5 px-3 text-text-muted">{c.model}</td>
                     <td className="py-2.5 px-3">
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-semibold ${
-                          c.status === 'ok'
+                          c.ok
                             ? 'border border-text/40 text-text'
                             : 'bg-[rgba(217,160,102,.15)] border border-[rgba(217,160,102,.4)] text-[#D9A066]'
                         }`}
                       >
-                        {c.status}
+                        {c.ok ? 'ok' : 'failed'}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-text-muted">{c.latencyMs}ms</td>
+                    <td className="py-2.5 px-3 text-text-muted">{c.latency_ms}ms</td>
                     <td className="py-2.5 px-3">
                       <span className={c.cached ? 'text-text font-medium' : 'text-text-faint'}>
                         {c.cached ? 'yes' : 'no'}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-text-faint">{c.timestamp}</td>
+                    <td className="py-2.5 px-3 text-text-faint max-w-[360px]" title={c.switch_reason || undefined}>
+                      {/* long provider errors: two lines here, the full text on hover */}
+                      <span className="line-clamp-2">{c.switch_reason || '—'}</span>
+                    </td>
                   </tr>
                 );
               })}
@@ -125,7 +130,7 @@ export default function SystemStatusPage() {
           </table>
         </div>
         <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs font-mono text-text-faint">
-          <span>Active model: {data.activeModel}</span>
+          <span>Last model that answered: {lastOk ? `${lastOk.provider}/${lastOk.model}` : '—'}</span>
           <span>Poll interval: 5s</span>
         </div>
       </div>

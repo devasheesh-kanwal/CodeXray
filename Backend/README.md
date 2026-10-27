@@ -127,6 +127,11 @@ answers only from that cache and never calls a provider. A streamed answer can
 only switch models before its first chunk; after that, a failure raises
 `LLMStreamError`.
 
+**Demo cache (offline fallback):** before a demo, run `python scripts/demo_prepare.py` (from `Backend/`, with internet) to index `DEMO_REPO_PATH` and cache every demo question and review.
+`python scripts/demo_prepare.py --check` then replays one question and one review with `DEMO_MODE=true` and reports the real API calls (should be 0).
+If the network or providers fail during the demo, set `DEMO_MODE=true` in `.env` and restart the server: cached answers still work, uncached ones return `503`.
+Only questions asked word for word as prepared (on the same index) are cached; set `DEMO_MODE=false` again afterwards.
+
 ## Indexing
 
 Adding a repo (`POST /api/repos`, or the script below) runs these stages in

@@ -77,6 +77,14 @@ def test_loose_marker_formats_are_normalized_and_checked():
     assert [d.marker for d in result.dropped] == ["[shop/auth.py:1-2]"]
 
 
+def test_grouped_markers_are_split_and_each_one_checked():
+    result = check("Fees are capped [shop/api.py:2-4, shop/db.py:7; shop/auth.py:1-2].")
+    assert [(c.file, c.start_line, c.end_line) for c in result.citations] == [
+        ("shop/api.py", 2, 4), ("shop/db.py", 7, 7)]
+    assert result.answer == "Fees are capped [shop/api.py:2-4] [shop/db.py:7-7]."
+    assert [d.marker for d in result.dropped] == ["[shop/auth.py:1-2]"]
+
+
 def test_why_has_no_stray_backticks_or_markers():
     result = check("Saved by save_user [shop/db.py:5-6], and read by `get_user` `[shop/db.py:8-10]`.")
     assert result.citations[1].why == "Saved by save_user, and read by `get_user`"

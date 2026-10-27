@@ -1,267 +1,131 @@
-import { mockFetch, mockStreamPost, mockSubscribeEvents } from './mock';
-import type { AskStreamEvent, Citation } from './types';
+import { mockFetch, mockStreamPost, mockSubscribeRepairEvents } from './mock';
+import type { AskStreamEvent, ErrorBody, RepairEvent } from './types';
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
+/** An API error in the backend's standard format. status 0 means the backend was unreachable. */
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
-    super(message);
+  code: string;
+  details: Record<string, unknown>;
+  constructor(status: number, body: ErrorBody) {
+    super(body.message);
     this.status = status;
+    this.code = body.code;
+    this.details = body.details || {};
   }
 }
 
-function normalizePathAndBody(path: string, options?: RequestInit): { path: string; options?: RequestInit } {
-  if (USE_MOCK) return { path, options };
+const NETWORK_ERROR: ErrorBody = { code: 'NETWORK_ERROR', message: 'Backend unreachable', details: {} };
 
-  let reqPath = path;
-  let newOptions = options;
-
-  // Map /api/ask to /api/repos/{repoId}/ask
-  if (reqPath === '/api/ask' && options?.body) {
-    try {
-      const parsed = typeof options.body === 'string' ? JSON.parse(options.body) : (options.body as any);
-      if (parsed.repoId) {
-        reqPath = `/api/repos/${encodeURIComponent(parsed.repoId)}/ask`;
-        newOptions = {
-          ...options,
-          body: JSON.stringify({ question: parsed.question }),
-        };
-      }
-    } catch {}
+/** Turn a non-2xx response into an ApiError, reading the {"error": {...}} body when there is one. */
+async function toApiError(res: Response): Promise<ApiError> {
+  try {
+    const body = await res.json();
+    if (body?.error?.message) return new ApiError(res.status, body.error);
+  } catch {
+    // not JSON; fall through
   }
+  return new ApiError(res.status, { code: 'HTTP_ERROR', message: res.statusText || `HTTP ${res.status}`, details: {} });
+}
 
-  // Map /api/pr/review to /api/repos/{repoId}/review
-  if (reqPath === '/api/pr/review' && options?.body) {
-    try {
-      const parsed = typeof options.body === 'string' ? JSON.parse(options.body) : (options.body as any);
-      if (parsed.repoId) {
-        reqPath = `/api/repos/${encodeURIComponent(parsed.repoId)}/review`;
-        newOptions = {
-          ...options,
-          body: JSON.stringify({
-            diff_text: parsed.diff ?? parsed.diff_text,
-            base_branch: parsed.base,
-            head_branch: parsed.head,
-          }),
-        };
-      }
-    } catch {}
+async function send(path: string, options?: RequestInit): Promise<Response> {
+  if (USE_MOCK) return mockFetch(path, options);
+  try {
+    return await fetch(BASE + path, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+    });
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e;
+    throw new ApiError(0, NETWORK_ERROR);
   }
-
-  // Map /api/repair/... to backend routes
-  if (reqPath === '/api/repair/start' && options?.body) {
-    try {
-      const parsed = typeof options.body === 'string' ? JSON.parse(options.body) : (options.body as any);
-      if (parsed.repoId) {
-        reqPath = `/api/repos/${encodeURIComponent(parsed.repoId)}/repair`;
-        newOptions = {
-          ...options,
-          body: JSON.stringify({
-            issue: parsed.issue || parsed.issueDescription || 'Fix automated issue',
-            test_command: parsed.test_command,
-          }),
-        };
-      }
-    } catch {}
-  }
-
-  const repairSub = reqPath.match(/^\/api\/repair\/([^/]+)(\/.*)?$/);
-  if (repairSub && repairSub[1] !== 'start') {
-    reqPath = `/api/repairs/${repairSub[1]}${repairSub[2] || ''}`;
-  }
-
-  return { path: reqPath, options: newOptions };
 }
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  if (USE_MOCK) {
-    const res = await mockFetch(path, options);
-    if (!res.ok) throw new ApiError(res.status, await res.text());
-    return res.json() as Promise<T>;
-  }
-
-  const normalized = normalizePathAndBody(path, options);
-
-  const res = await fetch(BASE + normalized.path, {
-    ...normalized.options,
-    headers: { 'Content-Type': 'application/json', ...(normalized.options?.headers || {}) },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new ApiError(res.status, text || res.statusText);
-  }
-
-  const json = await res.json();
-
-  // Normalize repos list
-  if (normalized.path === '/api/repos' && Array.isArray(json)) {
-    return json.map((r: any) => ({
-      ...r,
-      id: r.id || r.repo_id,
-      repo_id: r.repo_id || r.id,
-      filesDone: r.filesDone ?? r.files_done,
-      totalFiles: r.totalFiles ?? r.files_total,
-    })) as T;
-  }
-
-  // Normalize single repo response
-  if (json && typeof json === 'object' && ('repo_id' in json || 'run_id' in json)) {
-    if ('repo_id' in json && !('id' in json)) {
-      json.id = json.repo_id;
-    }
-    if ('run_id' in json && !('runId' in json)) {
-      json.runId = json.run_id;
-    }
-  }
-
-  // Normalize file slice response: { lines: string[] } -> { content: string }
-  if (json && typeof json === 'object' && Array.isArray(json.lines) && !json.content) {
-    json.content = json.lines.join('\n');
-  }
-
-  return json as T;
+  const res = await send(path, options);
+  if (!res.ok) throw await toApiError(res);
+  return res.json() as Promise<T>;
 }
 
+export function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  return apiFetch<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
+}
+
+/** Parse one SSE block ("event: x\ndata: {...}") into {event, data}. */
+function parseBlock(block: string): { event: string; data: unknown } | null {
+  let event = 'message';
+  const data: string[] = [];
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) data.push(line.slice(5).trim());
+  }
+  if (!data.length) return null;
+  try {
+    return { event, data: JSON.parse(data.join('\n')) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * POST that returns an SSE stream (the Ask stream). EventSource only supports GET,
+ * so this uses fetch + ReadableStream and splits the body on blank lines.
+ * Non-2xx responses (422/404/409) are normal JSON errors and are thrown as ApiError.
+ */
 export async function streamPost(
   path: string,
   body: unknown,
   onEvent: (e: AskStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (USE_MOCK) {
-    await mockStreamPost(path, body, onEvent, signal);
-    return;
-  }
-
-  let reqPath = path;
-  let reqBody = body;
-
-  const parsedBody = body as any;
-  if ((path === '/api/ask' || path.endsWith('/ask')) && parsedBody?.repoId) {
-    reqPath = `/api/repos/${encodeURIComponent(parsedBody.repoId)}/ask/stream`;
-    reqBody = { question: parsedBody.question };
-  }
-
-  const res = await fetch(BASE + reqPath, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(reqBody),
-    signal,
-  });
-
-  if (!res.ok || !res.body) {
-    throw new ApiError(res.status, await res.text().catch(() => res.statusText));
-  }
-
+  if (USE_MOCK) return mockStreamPost(path, body, onEvent, signal);
+  const res = await send(path, { method: 'POST', body: JSON.stringify(body), signal });
+  if (!res.ok || !res.body) throw await toApiError(res);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let currentEvent = 'message';
-  let currentData = '';
-
-  const dispatchEvent = () => {
-    if (!currentData) return;
-    try {
-      const data = JSON.parse(currentData);
-
-      if (currentEvent === 'agent' || data.type === 'agent_status') {
-        const agent = data.agent || 'Agent';
-        const status = data.status || data.detail || (data.action ? `${data.action}…` : 'processing…');
-        onEvent({
-          type: 'agent_status',
-          agent: agent.charAt(0).toUpperCase() + agent.slice(1),
-          status,
-        });
-      } else if (currentEvent === 'token' || data.type === 'token') {
-        onEvent({ type: 'token', text: data.text ?? '' });
-      } else if (currentEvent === 'final' || data.type === 'meta') {
-        const citations: Citation[] = (data.citations || []).map((c: any) => ({
-          file: c.file,
-          start: c.start ?? c.start_line ?? 1,
-          end: c.end ?? c.end_line ?? (c.start ?? c.start_line ?? 1),
-          start_line: c.start_line ?? c.start,
-          end_line: c.end_line ?? c.end,
-          why: c.why,
-        }));
-        onEvent({
-          type: 'meta',
-          citations,
-          confidence: data.confidence ?? 1.0,
-          provider: data.provider ?? 'codexray',
-          model: data.model ?? 'system',
-          cached: !!data.cached,
-          not_found: !!data.not_found,
-          steps: data.agent_trace || data.steps,
-        });
-      } else if (currentEvent === 'done' || data.type === 'done') {
-        onEvent({ type: 'done' });
-      } else if (currentEvent === 'error' || data.type === 'error') {
-        onEvent({ type: 'error', message: data.message || 'Stream error occurred' });
-      }
-    } catch {
-      // ignore JSON parse error on incomplete chunks
-    }
-    currentEvent = 'message';
-    currentData = '';
-  };
-
   while (true) {
     const { done, value } = await reader.read();
-    if (done) {
-      dispatchEvent();
-      break;
-    }
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line) {
-        // Empty line indicates event boundary in SSE specification
-        dispatchEvent();
-        continue;
-      }
-      if (line.startsWith('event:')) {
-        currentEvent = line.slice(6).trim();
-      } else if (line.startsWith('data:')) {
-        const chunk = line.slice(5).trim();
-        currentData = currentData ? currentData + '\n' + chunk : chunk;
-      }
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+    const blocks = buffer.split('\n\n');
+    buffer = blocks.pop() || '';
+    for (const block of blocks) {
+      const parsed = parseBlock(block);
+      if (parsed) onEvent(parsed as AskStreamEvent);
     }
   }
+  // A last event without the closing blank line (e.g. a proxy trimmed it) still counts.
+  const last = parseBlock(buffer + decoder.decode());
+  if (last) onEvent(last as AskStreamEvent);
 }
 
-export function subscribeEvents(path: string): EventSource | ReturnType<typeof mockSubscribeEvents> {
-  if (USE_MOCK) {
-    const handlers: { message?: (e: any) => void; error?: (e: any) => void } = {};
-    const mock = mockSubscribeEvents(path, (e) => handlers.message?.(e), (e) => handlers.error?.(e));
-    const obj: any = {
-      close: () => mock.close(),
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    };
-    Object.defineProperty(obj, 'onmessage', {
-      set(fn) { handlers.message = fn; },
-      get() { return handlers.message; },
-    });
-    Object.defineProperty(obj, 'onerror', {
-      set(fn) { handlers.error = fn; },
-      get() { return handlers.error; },
-    });
-    return obj;
-  }
+export type RepairStreamHandlers = {
+  onOpen?: () => void;
+  onEvent: (e: RepairEvent) => void;
+  onDone: (state: string) => void;
+  onError: (e: ErrorBody) => void;
+};
 
-  let finalPath = path;
-  const repairSub = path.match(/^\/api\/repair\/([^/]+)(\/.*)?$/);
-  if (repairSub && repairSub[1] !== 'start') {
-    finalPath = `/api/repairs/${repairSub[1]}${repairSub[2] || ''}`;
-  }
-
-  const es = new EventSource(BASE + finalPath);
-  return es;
+/** Follow GET /api/repairs/{run_id}/events with EventSource. Returns a close function. */
+export function subscribeRepairEvents(runId: string, h: RepairStreamHandlers): () => void {
+  if (USE_MOCK) return mockSubscribeRepairEvents(runId, h);
+  const es = new EventSource(`${BASE}/api/repairs/${runId}/events`);
+  es.addEventListener('open', () => h.onOpen?.());
+  es.addEventListener('repair_event', (e) => h.onEvent(JSON.parse((e as MessageEvent).data)));
+  es.addEventListener('done', (e) => {
+    h.onDone(JSON.parse((e as MessageEvent).data).state);
+    es.close();
+  });
+  es.addEventListener('error', (e) => {
+    const data = (e as MessageEvent).data;
+    // A server-sent `error` event has data; a dropped connection does not (EventSource retries it).
+    if (data) {
+      h.onError(JSON.parse(data));
+      es.close();
+    }
+  });
+  return () => es.close();
 }
-

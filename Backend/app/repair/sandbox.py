@@ -43,6 +43,13 @@ class TestRun:
     timed_out: bool = False
     output: str = ""
     error: str | None = None  # set when no per-test results could be read
+    errored: list[str] = field(default_factory=list)  # failed with an error, not an assertion
+    messages: dict[str, str] = field(default_factory=dict)  # test id -> failure message
+
+    @property
+    def no_tests(self) -> bool:
+        """pytest collected nothing (exit code 5), e.g. a repo without tests."""
+        return not self.outcomes and self.exit_code == 5
 
     @property
     def passed(self) -> list[str]:
@@ -56,6 +63,25 @@ class TestRun:
         if self.error:
             return f"tests could not run: {self.error}"
         return f"{len(self.passed)} passed, {len(self.failed)} failed"
+
+
+def merge_runs(suite: TestRun, repro: TestRun) -> TestRun:
+    """The repo's own test run plus the reproduction test's run, as one result.
+
+    A suite that collected nothing (a repo whose only test is the reproduction
+    test) is not an error.
+    """
+    suite_error = None if suite.no_tests else suite.error
+    return TestRun(
+        sandbox=suite.sandbox,
+        outcomes={**suite.outcomes, **repro.outcomes},
+        exit_code=suite.exit_code,
+        timed_out=suite.timed_out or repro.timed_out,
+        output=f"{suite.output}\n{repro.output}".strip(),
+        error=suite_error or repro.error,
+        errored=suite.errored + [t for t in repro.errored if t not in suite.errored],
+        messages={**suite.messages, **repro.messages},
+    )
 
 
 def pytest_args(test_command: str | None) -> list[str]:
@@ -95,7 +121,8 @@ class Sandbox:
         if self.kind == "docker":
             command, env = self.docker_command(cwd, results_dir, label, args), None
         else:
-            command = [sys.executable, "-m", "pytest", *args, *_report_args(str(report))]
+            command = [sys.executable, "-m", "pytest", *args, *_report_args(str(report)),
+                       *isolation_args(cwd, results_dir)]
             env = clean_env(cwd)
         run = TestRun(sandbox=self.kind)
         try:
@@ -110,7 +137,7 @@ class Sandbox:
             run.output = _tail((exc.stdout or b"") + (exc.stderr or b""))
             run.error = f"timed out after {self.timeout_s:.0f} s"
             return run
-        run.outcomes = read_junit(report)
+        run.outcomes, run.errored, run.messages = read_junit_details(report)
         if not run.outcomes:
             run.error = f"no test results (pytest exit code {run.exit_code})"
         return run
@@ -136,6 +163,32 @@ def docker_available() -> bool:
         return False
 
 
+def own_pytest_config(cwd: Path) -> Path | None:
+    """The repo's own pytest config file at its root, if it has one."""
+    markers = {"pytest.ini": "", "pyproject.toml": "[tool.pytest", "tox.ini": "[pytest]",
+               "setup.cfg": "[tool:pytest]"}
+    for name, marker in markers.items():
+        file = cwd / name
+        if file.is_file() and marker in file.read_text(encoding="utf-8", errors="replace"):
+            return file
+    return None
+
+
+def isolation_args(cwd: Path, results_dir: Path) -> list[str]:
+    """Keep pytest inside the repo (subprocess sandbox only).
+
+    Without this, a repo with no pytest config of its own (cloned repos and repair
+    worktrees live under CodeXray's data folder) picks up CodeXray's own
+    pytest.ini from a parent folder, including its pythonpath, so the repo's
+    tests could import CodeXray's code instead of the repo's.
+    """
+    config = own_pytest_config(cwd)
+    if config is None:
+        config = results_dir / "pytest.ini"
+        config.write_text("[pytest]\n", encoding="utf-8")
+    return ["-c", str(config), f"--rootdir={cwd}", f"--confcutdir={cwd}"]
+
+
 def clean_env(cwd: Path) -> dict[str, str]:
     """os.environ without anything that looks like a secret, for the subprocess fallback."""
     env = {k: v for k, v in os.environ.items() if not SECRET_ENV.search(k)}
@@ -146,21 +199,48 @@ def clean_env(cwd: Path) -> dict[str, str]:
 
 def read_junit(report: Path) -> dict[str, str]:
     """{test id: outcome} from a pytest JUnit XML (xunit1) report, or {} if missing."""
+    return read_junit_details(report)[0]
+
+
+def read_junit_details(report: Path) -> tuple[dict[str, str], list[str], dict[str, str]]:
+    """(outcomes, errored test ids, {test id: failure or error message}) from a JUnit report.
+
+    An error (collection, import, fixture) counts as "failed" in outcomes, but is
+    also listed in errored: only a real assertion failure reproduces a bug.
+    """
     if not report.is_file():
-        return {}
+        return {}, [], {}
     try:
         root = ET.parse(report).getroot()
     except ET.ParseError:
-        return {}
-    outcomes = {}
+        return {}, [], {}
+    outcomes, errored, messages = {}, [], {}
     for case in root.iter("testcase"):
+        test_id = junit_test_id(case.get("file"), case.get("classname", ""), case.get("name", ""))
+        failure, error = case.find("failure"), case.find("error")
         outcome = "passed"
-        if case.find("failure") is not None or case.find("error") is not None:
+        if failure is not None or error is not None:
             outcome = "failed"
+            problem = error if error is not None else failure
+            messages[test_id] = failure_message(problem.get("message") or "", problem.text or "")
+            if error is not None:
+                errored.append(test_id)
         elif case.find("skipped") is not None:
             outcome = "skipped"
-        outcomes[junit_test_id(case.get("file"), case.get("classname", ""), case.get("name", ""))] = outcome
-    return outcomes
+        outcomes[test_id] = outcome
+    return outcomes, errored, messages
+
+
+def failure_message(message: str, text: str) -> str:
+    """The exception line of a failure ('E   ValueError: ...'), else pytest's message.
+
+    For a collection error pytest's message is only "collection failure"; the
+    real cause (e.g. ModuleNotFoundError) is on the first 'E' line of the text.
+    """
+    for line in text.splitlines():
+        if line.startswith("E "):
+            return line[1:].strip()[:300]
+    return message.strip()[:300]
 
 
 def junit_test_id(file: str | None, classname: str, name: str) -> str:

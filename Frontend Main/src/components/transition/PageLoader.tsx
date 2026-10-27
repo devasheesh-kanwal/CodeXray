@@ -27,7 +27,8 @@ export default function PageLoader() {
     if (reduce) return;
     startRef.current = performance.now();
     const tick = (now: number) => {
-      const elapsed = now - startRef.current;
+      // rAF's timestamp is the frame start, which can be just before startRef; never go negative.
+      const elapsed = Math.max(0, now - startRef.current);
       const p = Math.min(100, (elapsed / LOADER_DURATION_MS) * 100);
       setProgress(p);
       const si = Math.min(STATUSES.length - 1, Math.floor(elapsed / 600));
@@ -57,6 +58,40 @@ export default function PageLoader() {
       className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black"
       style={{ animation: reduce ? 'fadeIn 0.2s ease-out' : 'fadeIn 0.3s ease-out' }}
     >
+      {/* background clip: blurred, slowly pushing in while the blur eases ("focus pull") */}
+      <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
+        <video
+          src="/assets/loading.mp4"
+          poster="/assets/loading-poster.webp"
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          // Play once, slowed so the clip lasts exactly as long as the loader.
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget;
+            const loaderSeconds = (LOADER_DURATION_MS + 200) / 1000;
+            if (v.duration > 0) v.playbackRate = Math.min(1, Math.max(0.25, v.duration / loaderSeconds));
+          }}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{
+            transform: 'scale(1.12)',
+            filter: 'blur(6px) saturate(1.2) brightness(1)',
+            // opacity mask: the clip fades out towards the edges
+            maskImage: 'radial-gradient(ellipse 70% 65% at center, #000 35%, rgba(0,0,0,.6) 60%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 70% 65% at center, #000 35%, rgba(0,0,0,.6) 60%, transparent 100%)',
+            animation: reduce ? 'none' : `loaderPushIn ${LOADER_DURATION_MS + 200}ms cubic-bezier(.22,.61,.36,1) both`,
+          }}
+        />
+        {/* vignette keeps the logo and counter readable */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse at center, rgba(0,0,0,.1) 0%, rgba(0,0,0,.55) 62%, rgba(0,0,0,.9) 100%)',
+          }}
+        />
+      </div>
+
       {/* blurred code lines */}
       <div aria-hidden className="absolute inset-0 overflow-hidden opacity-20 pointer-events-none">
         <pre className="font-mono text-xs text-landing-mint leading-6 blur-sm select-none">
@@ -68,15 +103,6 @@ export async function ask(q) { return retrieve(q); }
 `}
         </pre>
       </div>
-
-      {/* scan line */}
-      {!reduce && (
-        <div
-          aria-hidden
-          className="absolute left-0 right-0 h-px bg-landing-red shadow-[0_0_12px_2px_rgba(194,28,29,0.8)]"
-          style={{ animation: `scanLine ${LOADER_DURATION_MS}ms linear infinite` }}
-        />
-      )}
 
       <div className="relative z-10 flex flex-col items-center gap-6">
         <Logo size="lg" as="h1" />
@@ -102,9 +128,10 @@ export async function ask(q) { return retrieve(q); }
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes scanLine {
-          0% { top: 0%; }
-          100% { top: 100%; }
+        @keyframes loaderPushIn {
+          0%   { opacity: 0; transform: scale(1.06); filter: blur(12px) saturate(1.2) brightness(.85); }
+          18%  { opacity: 1; }
+          100% { opacity: 1; transform: scale(1.18); filter: blur(4px) saturate(1.25) brightness(1.05); }
         }
       `}</style>
     </div>

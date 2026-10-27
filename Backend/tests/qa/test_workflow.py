@@ -49,6 +49,15 @@ def test_low_best_score_is_not_found_and_explainer_never_called(qa):
     assert (result.provider, result.model) == ("groq", ARCHITECT_MODEL)
 
 
+def test_not_found_answer_reports_cached_when_replayed(qa):
+    # Same question twice: the second run replays the Architect's replies from the LLM cache.
+    qa.fake.on(ARCHITECT_MODEL, search("kubernetes"), select(FIND_USER))
+    first = qa.ask("How is the kubernetes cluster deployed?")
+    second = qa.ask("How is the kubernetes cluster deployed?")
+    assert first.not_found and second.not_found
+    assert (first.cached, second.cached) == (False, True)
+
+
 def test_architect_found_false_is_not_found(qa):
     qa.fake.on(ARCHITECT_MODEL, search("find user"), select(found=False))
     assert qa.ask().not_found

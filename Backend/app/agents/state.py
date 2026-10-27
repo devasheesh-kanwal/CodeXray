@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr
 
+from app.atomic import write_text_atomic
+
 WorkflowKind = Literal["qa", "review", "repair"]
 EventKind = Literal[
     "agent_started",
@@ -71,6 +73,7 @@ class RunState(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
     artifacts: dict[str, Any] = Field(default_factory=default_artifacts)
     models_used: dict[str, list[str]] = Field(default_factory=dict)  # agent -> ["provider/model"]
+    uncached_calls: dict[str, int] = Field(default_factory=dict)  # agent -> replies not from the LLM cache
     attempt: int = 1
     budget: Budget = Field(default_factory=Budget)
     usage: Usage = Field(default_factory=Usage)
@@ -112,9 +115,7 @@ class RunState(BaseModel):
         if self._runs_dir is None:
             return
         self._runs_dir.mkdir(parents=True, exist_ok=True)
-        tmp = self._runs_dir / f"{self.run_id}.json.tmp"
-        tmp.write_text(self.model_dump_json(indent=1), encoding="utf-8")
-        tmp.replace(self._runs_dir / f"{self.run_id}.json")
+        write_text_atomic(self._runs_dir / f"{self.run_id}.json", self.model_dump_json(indent=1))
 
     @classmethod
     def load(cls, runs_dir: Path, run_id: str) -> "RunState | None":
@@ -149,10 +150,12 @@ class RunState(BaseModel):
 
     # ---------- models and budgets ----------
 
-    def record_model(self, agent: str, provider: str, model: str) -> None:
+    def record_model(self, agent: str, provider: str, model: str, cached: bool = False) -> None:
         used = self.models_used.setdefault(agent, [])
         if f"{provider}/{model}" not in used:
             used.append(f"{provider}/{model}")
+        if not cached:
+            self.uncached_calls[agent] = self.uncached_calls.get(agent, 0) + 1
 
     def charge(self, prompt_tokens: int, completion_tokens: int) -> None:
         self.usage.llm_calls += 1

@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api/client';
 import { useRepo } from '../context/RepoContext';
-import { Loading, EmptyState, ErrorBanner } from '../components/shared/States';
+import { Loading, EmptyState, ApiErrorView } from '../components/shared/States';
 import { CodeViewer } from '../components/shared/CodeViewer';
 import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
 import 'reactflow/dist/style.css';
-import type { FileNode, GraphData } from '../api/types';
+import type { TreeNode, TreeResponse, GraphData, FileSlice } from '../api/types';
 import { Folder, FileCode } from 'lucide-react';
 
 const G = {
@@ -52,26 +52,18 @@ const G = {
 };
 
 export default function ExplorerPage() {
-  const { selectedRepoId, setSelectedRepoId, setSelectedRepo } = useRepo();
+  const { selectedRepoId } = useRepo();
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  // The open file belongs to one repo; switching repos closes it.
+  const [openFile, setOpenFile] = useState<{ repo: string; path: string } | null>(null);
+  const selectedFile = openFile?.repo === selectedRepoId ? openFile.path : null;
+  const setSelectedFile = (path: string) => setOpenFile({ repo: selectedRepoId!, path });
   const [graphMode, setGraphMode] = useState<'imports' | 'calls'>('imports');
-
-  const reposQ = useQuery({ queryKey: ['repos'], queryFn: () => apiFetch<any[]>('/api/repos') });
-
-  useEffect(() => {
-    if (!selectedRepoId && reposQ.data && reposQ.data.length > 0) {
-      const first = reposQ.data[0];
-      const id = first.id || first.repo_id;
-      setSelectedRepoId(id);
-      setSelectedRepo(first);
-    }
-  }, [selectedRepoId, reposQ.data, setSelectedRepoId, setSelectedRepo]);
 
   const treeQ = useQuery({
     queryKey: ['tree', selectedRepoId],
-    queryFn: () => apiFetch<any>(`/api/repos/${selectedRepoId}/tree`),
+    queryFn: () => apiFetch<TreeResponse>(`/api/repos/${selectedRepoId}/tree`),
     enabled: !!selectedRepoId,
   });
 
@@ -83,13 +75,14 @@ export default function ExplorerPage() {
 
   const fileQ = useQuery({
     queryKey: ['file', selectedRepoId, selectedFile],
-    queryFn: () => apiFetch<{ path: string; content?: string; lines?: string[] }>(`/api/repos/${selectedRepoId}/file?path=${encodeURIComponent(selectedFile!)}`),
+    queryFn: () => apiFetch<FileSlice>(`/api/repos/${selectedRepoId}/file?path=${encodeURIComponent(selectedFile!)}`),
     enabled: !!selectedRepoId && !!selectedFile,
   });
 
   if (!selectedRepoId) return <EmptyState title="Select a repository" description="Choose a repo in the top bar." />;
 
-  const allNodes = graphQ.data?.nodes || [];
+  // imports link files; calls link functions and classes
+  const allNodes = (graphQ.data?.nodes || []).filter((n) => (graphMode === 'imports' ? n.type === 'file' : n.type !== 'file'));
   const nodes = expanded ? allNodes : allNodes.slice(0, 20);
   const rfNodes = nodes.map((n, i) => ({
     id: n.id,
@@ -107,18 +100,18 @@ export default function ExplorerPage() {
   }));
 
   const rfEdges = (graphQ.data?.edges || [])
-    .filter((e) => (graphMode === 'imports' ? e.kind === 'import' : e.kind === 'call'))
+    .filter((e) => e.type === graphMode)
     .filter((e) => nodes.some((n) => n.id === e.source) && nodes.some((n) => n.id === e.target))
     .map((e) => ({
       id: e.source + e.target,
       source: e.source,
       target: e.target,
-      style: { stroke: 'rgba(217,160,102,.35)', strokeWidth: 1.5, strokeDasharray: e.kind === 'call' ? '5 5' : undefined },
+      animated: e.type === 'calls',  // calls flow as moving dashes; imports stay solid (see the legend)
+      style: { stroke: 'rgba(217,160,102,.35)', strokeWidth: 1.5, strokeDasharray: e.type === 'calls' ? '5 5' : undefined },
     }));
 
-  function renderTree(node: FileNode, depth = 0): React.ReactNode {
-    if (!node) return null;
-    const isDir = node.type === 'dir' || (node.type as string) === 'folder';
+  function renderTree(node: TreeNode, depth = 0): React.ReactNode {
+    const isDir = node.type === 'folder';
     if (query && !isDir && !node.name.toLowerCase().includes(query.toLowerCase())) return null;
     return (
       <div key={node.path || node.name} style={{ paddingLeft: depth * 12 }}>
@@ -144,7 +137,7 @@ export default function ExplorerPage() {
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
           </button>
         )}
-        {node.children?.map((c) => renderTree(c, depth + 1))}
+        {node.children.map((c) => renderTree(c, depth + 1))}
       </div>
     );
   }
@@ -167,14 +160,8 @@ export default function ExplorerPage() {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search files…" style={G.input} />
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {treeQ.isLoading && <Loading />}
-            {treeQ.isError && (treeQ.error as any)?.status === 409 ? (
-              <div style={{ background: 'rgba(245,166,35,.10)', border: '1px solid rgba(245,166,35,.3)', borderRadius: 8, padding: 12, fontSize: 12, color: '#8FA8A0', fontFamily: 'Inter, sans-serif' }}>
-                Repo not indexed. <a href="/repos" style={{ color: '#DC1F1F' }}>Go to Repos</a>
-              </div>
-            ) : treeQ.isError ? (
-              <ErrorBanner message={(treeQ.error as Error).message} onRetry={() => treeQ.refetch()} />
-            ) : null}
-            {treeQ.data && renderTree((treeQ.data as any).root || treeQ.data)}
+            {treeQ.isError && <ApiErrorView error={treeQ.error} onRetry={() => treeQ.refetch()} />}
+            {treeQ.data && renderTree(treeQ.data.root)}
           </div>
         </div>
 
@@ -192,14 +179,14 @@ export default function ExplorerPage() {
           </div>
 
           {graphQ.isLoading && <Loading />}
-          {graphQ.isError && <ErrorBanner message={(graphQ.error as Error).message} onRetry={() => graphQ.refetch()} />}
+          {graphQ.isError && <ApiErrorView error={graphQ.error} onRetry={() => graphQ.refetch()} />}
 
           <div style={{ ...G.dense, flex: 1 }}>
             <ReactFlow nodes={rfNodes} edges={rfEdges} fitView>
               <Background color="rgba(255,255,255,.06)" gap={16} />
               <Controls />
               <MiniMap
-                style={{ background: 'rgba(14,14,18,.85)', border: '1px solid rgba(255,255,255,.10)', borderRadius: 8 }}
+                style={{ background: 'rgba(14,14,18,.85)', border: '1px solid rgba(255,255,255,.10)', borderRadius: 8, width: 120, height: 80 }}
                 nodeColor="#D9A066"
                 maskColor="rgba(0,0,0,.7)"
               />
@@ -221,12 +208,14 @@ export default function ExplorerPage() {
           {selectedFile ? (
             fileQ.isLoading ? (
               <Loading />
+            ) : fileQ.isError ? (
+              <ApiErrorView error={fileQ.error} onRetry={() => fileQ.refetch()} />
             ) : fileQ.data ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#8FA8A0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {selectedFile}
                 </div>
-                <CodeViewer code={fileQ.data.content ?? (Array.isArray((fileQ.data as any).lines) ? (fileQ.data as any).lines.join('\n') : '')} />
+                <CodeViewer code={fileQ.data.lines.join('\n')} language="python" startLine={fileQ.data.start} />
               </div>
             ) : null
           ) : (

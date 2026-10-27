@@ -6,12 +6,20 @@ A failed attempt goes to CLEANUP (failure note, branch deleted, fresh branch)
 and back to DIAGNOSING with attempt + 1. After MAX_ATTEMPTS: FAILED.
 MERGED and REJECTED come later, from the human (see service.py).
 
-LLM agents suggest (Architect, Debugger, Repair, Reviewer, Summarizer);
+When no test fails at BASELINE (no tests, or all pass), BRANCHED goes to
+REPRODUCING first: the Test writer writes one reproduction test, and plain code
+accepts it only if it FAILS on the unpatched code with an assertion (not an
+import or collection error). The accepted test is committed on the fix branch,
+so every attempt's worktree has the identical, frozen test.
+
+LLM agents suggest (Architect, Test writer, Debugger, Repair, Reviewer, Summarizer);
 plain code decides (Test runner, Eval gate, this Coordinator). The Reviewer only
 runs after the eval gate passed, so its opinion can never turn a failure into a pass.
+An independent review is required: if the Reviewer cannot answer, the run fails.
 """
 
 import asyncio
+import hashlib
 import time
 from pathlib import Path
 
@@ -26,6 +34,8 @@ from app.agents.roster import (
     ReviewerInput,
     Summarizer,
     SummarizerInput,
+    TestWriter,
+    TestWriterInput,
 )
 from app.agents.state import Budget, BudgetExceeded, RunState
 from app.agents.tools import ToolContext, ToolRegistry, default_registry, is_test_path
@@ -33,18 +43,27 @@ from app.api.schemas.repair import EvalResult
 from app.config import Settings
 from app.indexing.service import IndexService
 from app.llm import LLMError, LLMRouter
+from app.llm.router import is_excluded
 from app.repair import eval_gate, git_ops
 from app.repair.agents import MAX_FILES, RepairArchitect, RepairArchitectInput
-from app.repair.sandbox import Sandbox, TestRun
+from app.repair.sandbox import Sandbox, TestRun, merge_runs
 
 MAX_ATTEMPTS = 3
+MAX_REPRO_TRIES = 2  # the Test writer gets one retry with the reason its test was refused
 REPAIR_BUDGET = Budget(max_llm_calls=60, max_tokens=400_000, max_seconds=600)
 WEAK_SANDBOX = ("Docker is not available: tests run as a plain subprocess with a timeout. "
                 "This sandbox is weaker (no network or file system isolation).")
+# A reproduction test that fails with one of these shows a broken test, not the bug.
+NOT_THE_BUG = ("ImportError", "ModuleNotFoundError", "NameError", "SyntaxError", "fixture '")
 
 
 def branch_name(run_id: str) -> str:
     return f"codexray/fix-{run_id}"
+
+
+def repro_path(run_id: str) -> str:
+    """The reproduction test file, at the repo root (the root is on sys.path in the sandbox)."""
+    return f"test_codexray_repro_{run_id}.py"
 
 
 def approved_branch_name(run_id: str) -> str:
@@ -55,6 +74,7 @@ class RepairWorkflow(Workflow):
     kind = "repair"
     start = "CREATED"
     final_states = frozenset({"AWAITING_APPROVAL", "FAILED"})
+    review_retry_max_wait_s = 60.0  # tests set 0
 
     def __init__(
         self,
@@ -79,6 +99,7 @@ class RepairWorkflow(Workflow):
             "BASELINE": self.baseline,
             "PLANNING": self.planning,
             "BRANCHED": self.branched,
+            "REPRODUCING": self.reproducing,
             "DIAGNOSING": self.diagnosing,
             "PATCHING": self.patching,
             "TESTING": self.testing,
@@ -97,11 +118,14 @@ class RepairWorkflow(Workflow):
 
     async def baseline(self, state: RunState) -> str:
         run = await self._run_tests(state, self.repo_root, "baseline")
-        if run.error:
+        if run.error and not run.no_tests:
             return self._fail(state, f"Baseline tests could not run: {run.error}.")
-        if not run.failed:
-            return self._fail(state, "Cannot reproduce: no test fails on the current checkout.")
         state.artifacts["baseline"] = run.outcomes
+        if not run.failed:
+            state.artifacts["needs_repro"] = True
+            why = "The repo has no tests" if run.no_tests else "No existing test fails"
+            state.emit("agent_output", f"{why}; CodeXray will write a reproduction test after planning.",
+                       agent="coordinator", needs_repro=True)
         return "PLANNING"
 
     async def planning(self, state: RunState) -> str:
@@ -123,7 +147,34 @@ class RepairWorkflow(Workflow):
                        "starts from the last commit without them.", agent="coordinator", recoverable=True)
         state.artifacts["base_commit"] = git_ops.head_commit(self.repo_root)
         self._make_worktree(state)
-        return "DIAGNOSING"
+        return "REPRODUCING" if state.artifacts.get("needs_repro") else "DIAGNOSING"
+
+    async def reproducing(self, state: RunState) -> str:
+        """Test writer suggests a reproduction test; plain code accepts it only if it fails right."""
+        path = repro_path(state.run_id)
+        test_file = self.worktree(state) / path
+        feedback, problem = "", "no test was written"
+        for attempt in range(1, MAX_REPRO_TRIES + 1):
+            data = TestWriterInput(run_id=state.run_id, issue=state.inputs["issue"],
+                                   files=state.artifacts["files"], test_file=path, feedback=feedback)
+            ctx = self._context(state, worktree=True)
+            ctx.test_file = path
+            try:
+                await TestWriter(self.router, self.tools, ctx).run(data, state)
+            except AgentError as exc:
+                problem = f"the Test writer gave no valid answer: {first_line(exc)}"
+            if test_file.is_file():
+                run = await self._run_tests(state, self.worktree(state), f"repro-{attempt}", only=path)
+                problem = repro_problem(run)
+                if problem is None:
+                    return self._freeze_repro(state, run)
+                feedback = f"{problem}\nTest output:\n{run.output[-2000:]}"
+            else:
+                feedback = f"{problem}. Call write_test with the complete file."
+            state.emit("agent_output", f"Reproduction test not accepted (try {attempt} of "
+                       f"{MAX_REPRO_TRIES}): {problem}", agent="coordinator", reason=problem)
+        test_file.unlink(missing_ok=True)
+        return self._fail(state, f"Could not write a test that reproduces the issue: {problem}.")
 
     async def diagnosing(self, state: RunState) -> str:
         data = DebuggerInput(
@@ -177,7 +228,7 @@ class RepairWorkflow(Workflow):
         after = TestRun(sandbox=self.sandbox.kind, outcomes=state.artifacts["after"]["outcomes"],
                         error=state.artifacts["after"]["error"])
         result: EvalResult = await asyncio.to_thread(
-            eval_gate.evaluate, self._baseline(state), after, self.worktree(state))
+            eval_gate.evaluate, self._baseline(state), after, self.worktree(state), state.artifacts.get("repro"))
         state.artifacts["eval"] = result.model_dump()
         ok = eval_gate.passed(result)
         failed = [f"{c.name}: {c.detail}" for c in result.checks if not c.passed]
@@ -190,23 +241,47 @@ class RepairWorkflow(Workflow):
         return self._attempt_failed(state, "The eval gate failed: " + "; ".join(failed), failed)
 
     async def reviewing(self, state: RunState) -> str:
-        """Advisory second opinion from a model that did not write the patch."""
+        """Second opinion from a model that did not write the patch.
+
+        The verdict is advisory (the human decides), but the review itself is required:
+        if no reviewer model answers after one retry, the run fails instead of
+        reaching approval without an independent review.
+        """
         exclude = list(state.models_used.get("repair", []))
         h = state.artifacts["hypothesis"]
         data = ReviewerInput(
             run_id=state.run_id, issue=state.inputs["issue"], root_cause=h["root_cause"],
             diff=state.artifacts["diff"], test_summary=state.artifacts["test_results"][-1]["summary"],
+            repro_test=(state.artifacts.get("repro") or {}).get("code", ""),
         )
         reviewer = Reviewer(self.router, self.tools, self._context(state, worktree=True))
-        try:
-            output = await reviewer.run(data, state, exclude_models=exclude)
-            review = {**output.model_dump(), "model": state.models_used["reviewer"][-1]}
-        except (AgentError, LLMError, BudgetExceeded) as exc:
-            review = {"verdict": None, "risk": None, "concerns": [], "model": None,
-                      "notes": f"Reviewer unavailable: {first_line(exc)}"}
-        review["excluded_models"] = exclude
+        for attempt in (1, 2):
+            try:
+                output = await reviewer.run(data, state, exclude_models=exclude)
+                break
+            except BudgetExceeded as exc:
+                return self._fail(state, f"Reviewer unavailable: {first_line(exc)}. "
+                                  "An independent review is required.")
+            except (AgentError, LLMError) as exc:
+                if attempt == 2:
+                    return self._fail(state, f"Reviewer unavailable after a retry: {first_line(exc)}. "
+                                      "An independent review is required, so the patch was not offered "
+                                      "for approval.")
+                wait = self._review_wait(exclude)
+                state.emit("agent_error", f"Reviewer unavailable ({first_line(exc)}); "
+                           f"retrying in {wait:.0f} s.", agent="reviewer", recoverable=True)
+                await asyncio.sleep(wait)
+        review = {**output.model_dump(), "model": state.models_used["reviewer"][-1], "excluded_models": exclude}
         state.artifacts["review"] = review
         return "AWAITING_APPROVAL"
+
+    def _review_wait(self, exclude: list[str]) -> float:
+        """Seconds until the first reviewer model leaves its cooldown (5 s if none is cooling down)."""
+        now = time.time()
+        ends = [self.router.state.cooldown_until(e.provider, e.model)
+                for e in self.router.lanes.get("reviewer", []) if not is_excluded(e.provider, e.model, exclude)]
+        waits = [end - now + 1 for end in ends if end]
+        return max(0.0, min(self.review_retry_max_wait_s, min(waits) if waits else 5.0))
 
     async def cleanup(self, state: RunState) -> str:
         """Failure note, delete the branch, then retry from DIAGNOSING or give up."""
@@ -231,15 +306,26 @@ class RepairWorkflow(Workflow):
 
     # ---------- helpers ----------
 
-    async def _run_tests(self, state: RunState, cwd: Path, label: str) -> TestRun:
-        """The Test runner (plain code): run the tests in the sandbox and record the result."""
+    async def _run_tests(self, state: RunState, cwd: Path, label: str, only: str | None = None) -> TestRun:
+        """The Test runner (plain code): run the tests in the sandbox and record the result.
+
+        only: run just this test file. Otherwise the repo's test command, plus the
+        frozen reproduction test when the run has one.
+        """
         state.emit("agent_started", f"test_runner started ({label})", agent="test_runner", step=0)
         if self.sandbox.kind == "subprocess" and not state.artifacts.get("sandbox_warned"):
             state.emit("agent_error", WEAK_SANDBOX, agent="test_runner", recoverable=True)
             state.artifacts["sandbox_warned"] = True
         started = time.monotonic()
         results_dir = self.settings.data_path / "runs" / state.run_id
-        run = await self.sandbox.run(cwd, state.inputs.get("test_command"), results_dir, label)
+        repro = state.artifacts.get("repro")
+        if only:
+            run = await self.sandbox.run(cwd, f"pytest {only}", results_dir, label)
+        else:
+            run = await self.sandbox.run(cwd, state.inputs.get("test_command"), results_dir, label)
+            if repro:
+                extra = await self.sandbox.run(cwd, f"pytest {repro['path']}", results_dir, f"{label}-repro")
+                run = merge_runs(run, extra)
         state.artifacts["test_results"].append({
             "attempt": label, "passed": len(run.passed), "failed": len(run.failed),
             "summary": run.summary(), "output": run.output,
@@ -277,6 +363,23 @@ class RepairWorkflow(Workflow):
                    attempts=state.artifacts.get("attempts", []))
         return "FAILED"
 
+    def _freeze_repro(self, state: RunState, run: TestRun) -> str:
+        """Commit the accepted reproduction test on the fix branch; later attempts start from it."""
+        path = repro_path(state.run_id)
+        raw = (self.worktree(state) / path).read_bytes()
+        commit_id = git_ops.commit(self.worktree(state), [path],
+                                   f"CodeXray reproduction test for {state.run_id}\n\n{state.inputs['issue'][:300]}")
+        state.artifacts["base_commit"] = commit_id
+        state.artifacts["repro"] = {"path": path, "code": raw.decode("utf-8", errors="replace"),
+                                    "sha256": hashlib.sha256(raw).hexdigest(),
+                                    "commit": commit_id, "targets": run.failed}
+        # The new test's failures are the targets; anything in it that passes guards against regressions.
+        state.artifacts["baseline"] = {**state.artifacts["baseline"], **run.outcomes}
+        state.emit("agent_output", f"Reproduction test accepted: {len(run.failed)} test(s) fail on the "
+                   f"unpatched code. Frozen in {path}; the fix may not change it.",
+                   agent="coordinator", path=path, targets=run.failed, commit=commit_id)
+        return "DIAGNOSING"
+
     def _baseline(self, state: RunState) -> TestRun:
         return TestRun(sandbox=self.sandbox.kind, outcomes=state.artifacts["baseline"])
 
@@ -306,6 +409,21 @@ class RepairWorkflow(Workflow):
 
     def _remove_worktree(self, state: RunState) -> None:
         remove_repair_branch(self.repo_root, self.worktree(state), state.run_id)
+
+
+def repro_problem(run: TestRun) -> str | None:
+    """Why a reproduction test does not show the bug, or None if it does (plain code decides)."""
+    if run.error:
+        return f"the test could not run: {run.error}"
+    if run.errored:
+        return f"the test errored instead of failing an assertion: {run.messages.get(run.errored[0], '?')}"
+    if not run.failed:
+        return "the test passed on the unpatched code, so it does not show the bug"
+    for test in run.failed:
+        message = run.messages.get(test, "")
+        if message.startswith(NOT_THE_BUG):
+            return f"the test fails for a reason unrelated to the bug: {message}"
+    return None
 
 
 def first_line(exc: Exception) -> str:

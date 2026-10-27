@@ -13,6 +13,7 @@ from typing import Any
 
 from app.agents.events import EventBus
 from app.agents.state import Budget, BudgetExceeded, RunState, WorkflowKind
+from app.llm.errors import LLMError
 
 logger = logging.getLogger("codexray.agents")
 
@@ -64,6 +65,13 @@ class Coordinator:
                 str(exc) if isinstance(exc, BudgetExceeded)
                 else f"time budget used up ({state.budget.max_seconds:.0f} s)"
             )
+        except LLMError as exc:
+            # Expected when providers are down or a DEMO_MODE question is not cached: the
+            # API turns it into 503 LLM_UNAVAILABLE, so log one line, not a traceback.
+            logger.warning("Run %s stopped in state %s: %s", state.run_id, state.machine_state,
+                           str(exc).splitlines()[0] if str(exc) else type(exc).__name__)
+            state.status = "failed"
+            state.stop_reason = f"{type(exc).__name__}: {str(exc).splitlines()[0] if str(exc) else ''}"
         except Exception as exc:
             logger.exception("Run %s failed in state %s", state.run_id, state.machine_state)
             state.status = "failed"

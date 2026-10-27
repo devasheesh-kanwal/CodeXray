@@ -286,7 +286,7 @@ class Agent:
 
     def _account(self, state: RunState, response: LLMResponse) -> None:
         state.charge(response.prompt_tokens, response.completion_tokens)
-        state.record_model(self.name, response.provider, response.model)
+        state.record_model(self.name, response.provider, response.model, cached=response.cached)
 
     async def _use_tool(self, state, step, name, args, started) -> str:
         state.emit("tool_call", f"{name}({_short_args(args)})", agent=self.name, step=step,
