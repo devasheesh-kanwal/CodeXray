@@ -2,38 +2,91 @@ import { NavLink } from 'react-router-dom';
 import { Database, FolderTree, MessageSquare, GitPullRequest, Wrench, Activity } from 'lucide-react';
 
 const items = [
-  { to: '/repos', label: 'Repos', icon: Database },
-  { to: '/explorer', label: 'Explorer', icon: FolderTree },
-  { to: '/ask', label: 'Ask', icon: MessageSquare },
-  { to: '/pr-review', label: 'PR Review', icon: GitPullRequest },
-  { to: '/repair', label: 'Repair', icon: Wrench },
-  { to: '/status', label: 'System status', icon: Activity },
+  { to: '/repos',    label: 'Repos',         icon: Database },
+  { to: '/explorer', label: 'Explorer',       icon: FolderTree },
+  { to: '/ask',      label: 'Ask',            icon: MessageSquare },
+  { to: '/pr-review',label: 'PR Review',      icon: GitPullRequest },
+  { to: '/repair',   label: 'Repair',         icon: Wrench },
+  { to: '/status',   label: 'System Status',  icon: Activity },
 ];
 
 export default function Sidebar() {
   return (
-    <aside className="w-sidebar h-screen bg-surface border-r border-border flex flex-col">
-      <div className="h-topbar flex items-center px-6 border-b border-border">
-        <a href="/" className="text-h4 text-text-primary hover:text-accent transition-colors">CodeXray</a>
+    <aside
+      className="w-sidebar h-screen flex flex-col shrink-0"
+      style={{
+        background: 'linear-gradient(180deg, #1A1B1E 0%, #17181B 100%)',
+        borderRight: '1px solid rgba(255,255,255,.08)',
+      }}
+    >
+      {/* Logo */}
+      <div
+        className="h-[72px] flex items-center px-6 shrink-0"
+        style={{ borderBottom: '1px solid rgba(255,255,255,.08)' }}
+      >
+        <a
+          href="/"
+          className="font-display font-bold text-[22px] tracking-widest uppercase"
+          style={{ color: '#DFF5EB', letterSpacing: '0.14em' }}
+        >
+          Code
+          <span style={{ color: '#DC1F1F' }}>X</span>
+          ray
+        </a>
       </div>
-      <nav className="flex-1 p-3 space-y-1">
+
+      {/* Nav links */}
+      <nav className="flex-1 p-3 space-y-0.5 overflow-auto">
         {items.map((it) => (
           <NavLink
             key={it.to}
             to={it.to}
             end={it.to === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-body-sm transition-colors ${isActive ? 'bg-accent-soft text-accent font-semibold' : 'text-text-secondary hover:bg-surface-muted'
+              `relative flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[13px] font-sans font-medium transition-all duration-200 group ${
+                isActive
+                  ? 'text-[#DFF5EB]'
+                  : 'text-[#8FA8A0] hover:text-[#DFF5EB]'
               }`
             }
+            style={({ isActive }) =>
+              isActive
+                ? {
+                    background: 'rgba(220,31,31,.14)',
+                    borderLeft: '2px solid #DC1F1F',
+                    paddingLeft: '10px',
+                    boxShadow: '0 0 18px rgba(220,31,31,.10)',
+                  }
+                : {
+                    background: 'transparent',
+                    borderLeft: '2px solid transparent',
+                    paddingLeft: '10px',
+                  }
+            }
           >
-            <it.icon size={18} />
-            {it.label}
+            {({ isActive }) => (
+              <>
+                <it.icon
+                  size={16}
+                  style={{ color: isActive ? '#DC1F1F' : undefined }}
+                  className={isActive ? '' : 'group-hover:text-[#DFF5EB] transition-colors'}
+                />
+                {it.label}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
-      <div className="p-4 border-t border-border text-caption text-text-muted">
-        v0.1 · mock
+
+      {/* Footer */}
+      <div
+        className="p-4 text-[11px] font-mono shrink-0"
+        style={{
+          borderTop: '1px solid rgba(255,255,255,.08)',
+          color: 'rgba(143,168,160,.45)',
+        }}
+      >
+        v0.1 · CodeXray
       </div>
     </aside>
   );

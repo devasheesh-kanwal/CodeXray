@@ -2,46 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ───────────────────────────────────────────────
+   LANDING PAGE  (keeps the original deep black)
+   ─────────────────────────────────────────────── */
 :root {
-  --bg: #ededed;
-  --surface: #ffffff;
-  --surface-muted: #f5f5f5;
-  --border: #d9d9d9;
-  --border-strong: #c4c4c4;
-  --text-primary: #030303;
-  --text-secondary: #6b6b6b;
-  --text-muted: #9a9a9a;
-  --accent: #3164f4;
-  --accent-hover: #2554d4;
-  --accent-active: #1f47c9;
-  --accent-soft: #e8eeff;
-  --highlight: #eca800;
-  --success: #30a46c;
-  --success-soft: #e7f5ee;
-  --warning: #f5a623;
-  --warning-soft: #fef3e2;
-  --danger: #e5484d;
-  --danger-soft: #fdecee;
-  --landing-bg: #000000;
-  --landing-surface: #0A0A0A;
-  --landing-raised: #121212;
-  --landing-red: #C21C1D;
-  --landing-mint: #DFF5EB;
-  --landing-muted: #8FA8A0;
-  --landing-border: rgba(255, 255, 255, .10);
-  --landing-border-strong: rgba(255, 255, 255, .20);
-  --bg-deep: #000000;
-  --bg-teal: #000000;
-  --hero-red: #DC1F1F;
-  --hero-mint: #CFF1E6;
+  --landing-bg:           #000000;
+  --landing-surface:      #0A0A0A;
+  --landing-raised:       #121212;
+  --landing-red:          #C21C1D;
+  --landing-mint:         #DFF5EB;
+  --landing-muted:        #8FA8A0;
+  --landing-border:       rgba(255,255,255,.10);
+  --landing-border-strong:rgba(255,255,255,.20);
+  --bg-deep:              #000000;
+  --hero-red:             #DC1F1F;
+  --hero-mint:            #CFF1E6;
+  --nav-height:           64px;
 }
 
-html,
-body,
-#root {
+/* ───────────────────────────────────────────────
+   APP SHELL  — premium graphite dark palette
+   Scoped to .app-shell so landing stays untouched
+   ─────────────────────────────────────────────── */
+.app-shell {
+  /* Layer backgrounds */
+  --bg-deep:     #101113;   /* page */
+  --bg-surface:  #17181B;   /* sidebar, topbar, cards */
+  --bg-raised:   #202125;   /* inputs, hover, segmented control */
+  --bg-elevated: #26272C;   /* modals, dropdowns, drawers */
+
+  /* Borders */
+  --border:        rgba(255,255,255,.08);
+  --border-strong: rgba(255,255,255,.16);
+
+  /* Text (mint-tinted scale) */
+  --text:       #DFF5EB;
+  --text-muted: #8FA8A0;
+  --text-faint: rgba(143,168,160,.50);
+
+  /* Accent — CodeXray red */
+  --accent:      #DC1F1F;
+  --accent-hover:#C41A1A;
+  --accent-soft: rgba(220,31,31,.12);
+
+  /* Semantic */
+  --warning: #f5a623;
+  --success: #30a46c;
+}
+
+/* ───────────────────────────────────────────────
+   GLOBAL RESETS
+   ─────────────────────────────────────────────── */
+html, body, #root {
   height: 100%;
-  background-color: var(--bg);
-  color: var(--text-primary);
   font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
@@ -49,43 +62,127 @@ body,
   box-sizing: border-box;
 }
 
-:root {
-  --nav-height: 64px;
-}
-
 html {
   scroll-behavior: smooth;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
+  html { scroll-behavior: auto; }
 }
 
 section {
   scroll-margin-top: var(--nav-height);
 }
+section:focus { outline: none; }
 
-section:focus {
-  outline: none;
+.landing-section { overflow-x: clip; }
+
+/* ───────────────────────────────────────────────
+   APP-SHELL LAYOUT CHROME
+   ─────────────────────────────────────────────── */
+
+/* Page background with subtle radial glow */
+.app-shell {
+  background-color: #101113;
+  background-image:
+    radial-gradient(ellipse 60% 45% at 50% 0%, rgba(220,31,31,.07) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 35% at 80% 100%, rgba(220,31,31,.04) 0%, transparent 60%);
 }
 
-.landing-section {
-  overflow-x: clip;
+/* Sidebar top-highlight rule */
+.app-shell aside {
+  border-right: 1px solid rgba(255,255,255,.08);
+  background: linear-gradient(180deg, #1A1B1E 0%, #17181B 100%);
 }
 
-/* scrollbars */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+/* Topbar subtle bottom rule */
+.app-shell header {
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(23,24,27,.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-::-webkit-scrollbar-thumb {
-  background: #c4c4c4;
+/* ───────────────────────────────────────────────
+   CARD PREMIUM POLISH  (applied globally inside shell)
+   ─────────────────────────────────────────────── */
+.app-shell .card,
+.app-shell [class*="rounded-[14px]"][class*="bg-bg-surface"],
+.app-shell [class*="rounded-[14px]"][class*="bg-surface"] {
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow:
+    0 8px 30px rgba(0,0,0,.35),
+    inset 0 1px 0 rgba(255,255,255,.04);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.app-shell [class*="rounded-[14px]"][class*="bg-bg-surface"]:hover,
+.app-shell [class*="rounded-[14px]"][class*="bg-surface"]:hover {
+  box-shadow:
+    0 12px 40px rgba(0,0,0,.45),
+    inset 0 1px 0 rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.12);
+}
+
+/* ───────────────────────────────────────────────
+   DARK SCROLLBARS (app shell only)
+   ─────────────────────────────────────────────── */
+.app-shell ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.app-shell ::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.12);
   border-radius: 8px;
 }
-
-::-webkit-scrollbar-track {
+.app-shell ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,.20);
+}
+.app-shell ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Landing scrollbar (light) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ───────────────────────────────────────────────
+   FOCUS RING (dark-themed)
+   ─────────────────────────────────────────────── */
+.app-shell *:focus-visible {
+  outline: 2px solid rgba(220,31,31,.7);
+  outline-offset: 2px;
+}
+
+/* ───────────────────────────────────────────────
+   SELECT / OPTION dark styling
+   ─────────────────────────────────────────────── */
+.app-shell select,
+.app-shell select option {
+  background-color: #202125;
+  color: #DFF5EB;
+}
+
+/* ───────────────────────────────────────────────
+   MICRO-ANIMATIONS
+   ─────────────────────────────────────────────── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.app-shell main > * {
+  animation: fadeSlideUp 0.22s ease both;
+}
+
+/* Sidebar active nav item shimmer */
+.app-shell nav a[aria-current="page"]::before,
+.app-shell nav a.active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(220,31,31,.18) 0%, transparent 100%);
+  pointer-events: none;
 }
