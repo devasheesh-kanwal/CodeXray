@@ -75,12 +75,17 @@ export default function RepairPage() {
 
   return (
     <div className="font-sans">
-      <h1 className="font-display font-semibold text-3xl text-text mb-6 tracking-wide">
-        Repair
-      </h1>
+      <div style={{ marginBottom: 28 }}>
+        <h1 className="page-title" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '0 12px' }}>
+          <span className="page-title-accent">REPAIR</span>
+          <span>automated fixes</span>
+        </h1>
+        <div style={{ width: 40, height: 1, background: 'rgba(255,255,255,.12)', margin: '14px 0' }} />
+        <p style={{ color: '#8FA8A0', fontSize: 13 }}>Run multi-agent automated repair loops on temporary branches</p>
+      </div>
 
       {!runId && (
-        <div className="bg-bg-surface border border-border rounded-[14px] p-6 mb-6">
+        <div className="glass glass-card rounded-[16px] p-6 mb-6" style={{ borderRadius: 16 }}>
           <p className="text-sm text-text-muted mb-4 font-sans leading-relaxed">
             Describe the bug. CodeXray reproduces it with the tests, patches it on a separate branch, and waits for your approval.
           </p>
@@ -89,13 +94,13 @@ export default function RepairPage() {
             onChange={(e) => setIssue(e.target.value)}
             maxLength={4000}
             placeholder="e.g. A loan returned on its due date is reported as overdue"
-            className="w-full h-24 p-3.5 rounded-[10px] border border-border bg-bg-raised text-sm text-text placeholder:text-text-faint mb-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent-soft"
+            className="w-full h-24 p-3.5 rounded-[10px] border border-white/10 bg-white/5 text-sm text-text placeholder:text-text-faint mb-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent-soft"
           />
           <input
             value={testCommand}
             onChange={(e) => setTestCommand(e.target.value)}
             placeholder="Test command (optional, default: python -m pytest -q)"
-            className="w-full h-10 px-3 rounded-[10px] border border-border bg-bg-raised text-text placeholder:text-text-faint text-xs font-mono mb-4 focus:outline-none focus:border-accent"
+            className="w-full h-10 px-3 rounded-[10px] border border-white/10 bg-white/5 text-text placeholder:text-text-faint text-xs font-mono mb-4 focus:outline-none focus:border-accent"
           />
           <button
             type="button"
@@ -138,8 +143,8 @@ export default function RepairPage() {
           {streamError && <ErrorBanner message={streamError} />}
 
           {run?.root_cause && (
-            <div className="bg-bg-surface border border-border rounded-[10px] p-3.5 mb-4">
-              <h4 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-1.5">Root cause</h4>
+            <div className="glass rounded-[12px] p-3.5 mb-4" style={{ borderRadius: 12 }}>
+              <span className="section-label mb-1.5 block">Root cause</span>
               <p className="text-sm text-text">{run.root_cause}</p>
             </div>
           )}
@@ -152,7 +157,7 @@ export default function RepairPage() {
                 <div
                   key={`${e.ts}-${i}`}
                   className={`border rounded-[10px] p-3.5 transition-colors ${
-                    failed ? 'border-accent/40 bg-accent-soft' : 'border-border bg-bg-surface'
+                    failed ? 'border-accent/40 bg-accent-soft' : 'glass'
                   }`}
                 >
                   <div className="flex items-center gap-3 flex-wrap">
@@ -172,22 +177,22 @@ export default function RepairPage() {
 
           {/* Awaiting Approval */}
           {state === 'AWAITING_APPROVAL' && (
-            <div className="bg-bg-surface border-2 border-warning/70 rounded-[14px] p-6 mb-6 shadow-xl">
-              <h2 className="font-display font-semibold text-2xl text-text mb-3">
+            <div className="glass-strong border-2 border-[rgba(217,160,102,.7)] rounded-[16px] p-6 mb-6 shadow-2xl" style={{ borderRadius: 16 }}>
+              <h2 className="card-title text-2xl text-text mb-3 tracking-tight">
                 Awaiting approval
               </h2>
               <div className="mb-4">
-                <h4 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-1.5">
+                <span className="section-label mb-1.5 block">
                   Proposed Diff
-                </h4>
-                <pre className="bg-bg-deep border border-border p-4 rounded-[10px] text-mono text-xs text-text overflow-auto">
+                </span>
+                <pre className="glass-dense p-4 rounded-[10px] text-mono text-xs text-text overflow-auto">
                   {run?.diff}
                 </pre>
               </div>
               <div className="mb-4">
-                <h4 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-1.5">
+                <span className="section-label mb-1.5 block">
                   Evaluation Checklist
-                </h4>
+                </span>
                 <ul className="space-y-1.5">
                   {run?.eval?.checks.map((c) => (
                     <li key={c.name} className="text-xs font-mono flex items-center gap-2">
@@ -203,7 +208,7 @@ export default function RepairPage() {
                 </ul>
               </div>
               {run?.reviewer_notes && (
-                <div className="mb-5 bg-bg-raised border border-border rounded-[10px] p-3.5">
+                <div className="mb-5 glass rounded-[10px] p-3.5" style={{ borderRadius: 10 }}>
                   <p className="text-sm text-text-muted">{run.reviewer_notes}</p>
                   <p className="text-xs font-mono text-text-faint mt-1">does not override tests</p>
                 </div>
@@ -231,8 +236,8 @@ export default function RepairPage() {
           )}
 
           {state === 'MERGED' && (
-            <div className="bg-bg-surface border border-text/40 rounded-[14px] p-6 mb-6">
-              <h2 className="font-display font-semibold text-2xl text-text mb-1">Merged</h2>
+            <div className="glass rounded-[16px] p-6 mb-6" style={{ borderRadius: 16 }}>
+              <h2 className="card-title text-2xl text-text mb-1 tracking-tight">Merged</h2>
               <p className="text-sm text-text-muted">
                 Not pushed — local branch only{lastEvent?.data.branch ? `: ${String(lastEvent.data.branch)}` : ''}.
               </p>
@@ -240,15 +245,15 @@ export default function RepairPage() {
           )}
 
           {state === 'REJECTED' && (
-            <div className="bg-bg-surface border border-border rounded-[14px] p-6 mb-6">
-              <h2 className="font-display font-semibold text-2xl text-text mb-1">Rejected</h2>
+            <div className="glass rounded-[16px] p-6 mb-6" style={{ borderRadius: 16 }}>
+              <h2 className="card-title text-2xl text-text mb-1 tracking-tight">Rejected</h2>
               <p className="text-sm text-text-muted">The repair branch was deleted.</p>
             </div>
           )}
 
           {state === 'FAILED' && (
-            <div className="bg-bg-surface border border-accent/40 rounded-[14px] p-6 mb-6">
-              <h2 className="font-display font-semibold text-2xl text-accent mb-1">Failed</h2>
+            <div className="glass border border-accent/40 rounded-[16px] p-6 mb-6" style={{ borderRadius: 16 }}>
+              <h2 className="card-title text-2xl text-accent mb-1 tracking-tight">Failed</h2>
               <p className="text-sm text-text-muted">{failReason || lastEvent?.message || 'The repair run stopped.'}</p>
             </div>
           )}

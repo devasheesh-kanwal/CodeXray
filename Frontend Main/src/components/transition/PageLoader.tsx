@@ -27,7 +27,8 @@ export default function PageLoader() {
     if (reduce) return;
     startRef.current = performance.now();
     const tick = (now: number) => {
-      const elapsed = now - startRef.current;
+      // rAF's timestamp is the frame start, which can be just before startRef; never go negative.
+      const elapsed = Math.max(0, now - startRef.current);
       const p = Math.min(100, (elapsed / LOADER_DURATION_MS) * 100);
       setProgress(p);
       const si = Math.min(STATUSES.length - 1, Math.floor(elapsed / 600));

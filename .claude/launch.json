@@ -18,6 +18,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "Frontend Main", "run", "dev", "--", "--port", "5173", "--strictPort"],
       "port": 5173
+    },
+    {
+      "name": "codexray-web-mock",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "Frontend Main", "run", "dev", "--", "--mode", "mock", "--port", "5174", "--strictPort"],
+      "port": 5174
     }
   ]
 }

@@ -25,26 +25,36 @@ export default function SystemStatusPage() {
 
   return (
     <div className="font-sans">
-      <h1 className="font-display font-semibold text-3xl text-text mb-6 tracking-wide">
-        System status
-      </h1>
+      {/* Page title */}
+      <div style={{ marginBottom: 28 }}>
+        <h1 className="page-title" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '0 12px' }}>
+          <span className="page-title-accent">SYSTEM</span>
+          <span>status & telemetry</span>
+        </h1>
+        <div style={{ width: 40, height: 1, background: 'rgba(255,255,255,.12)', margin: '14px 0' }} />
+        <p style={{ color: '#8FA8A0', fontSize: 13 }}>Live LLM provider status, fallbacks, latency and cache metrics</p>
+      </div>
 
       {/* Provider cards: available = mint, cooldown = amber, no_keys/disabled = red */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
         {data.providers.map((p) => {
           const cooldownMs = p.cooldown_until ? new Date(p.cooldown_until).getTime() - now : 0;
           return (
-            <div key={p.name} className="bg-bg-surface border border-border rounded-[14px] p-6">
+            <div
+              key={p.name}
+              className="glass glass-card rounded-[16px] p-6"
+              style={{ borderRadius: 16 }}
+            >
               <div className="flex items-center justify-between mb-3">
-                <span className="font-display font-semibold text-xl text-text tracking-wide capitalize">
+                <span className="card-title text-xl text-text font-bold tracking-tight capitalize">
                   {p.name}
                 </span>
                 <span
                   className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold uppercase tracking-wider ${
                     p.state === 'available'
-                      ? 'border border-text text-text'
+                      ? 'border border-text/40 text-text'
                       : p.state === 'cooldown'
-                      ? 'bg-warning/15 border border-warning text-warning'
+                      ? 'bg-[rgba(217,160,102,.15)] border border-[rgba(217,160,102,.5)] text-[#D9A066]'
                       : 'border border-accent text-accent'
                   }`}
                 >
@@ -52,7 +62,7 @@ export default function SystemStatusPage() {
                 </span>
               </div>
               {p.state === 'cooldown' && cooldownMs > 0 && (
-                <p className="text-xs font-mono text-warning mt-2">
+                <p className="text-xs font-mono text-[#D9A066] mt-2">
                   cooldown {Math.ceil(cooldownMs / 1000)}s
                 </p>
               )}
@@ -62,14 +72,14 @@ export default function SystemStatusPage() {
       </div>
 
       {/* Recent calls table */}
-      <div className="bg-bg-surface border border-border rounded-[14px] p-6 overflow-hidden">
-        <h2 className="font-display font-semibold text-xl text-text mb-4 tracking-wide">
+      <div className="glass-dense rounded-[16px] p-6 overflow-hidden" style={{ borderRadius: 16 }}>
+        <h2 className="card-title text-xl text-text mb-4 tracking-tight">
           Recent calls
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-xs font-mono">
             <thead>
-              <tr className="text-left text-text-muted border-b border-border font-sans uppercase tracking-wider text-[11px]">
+              <tr className="text-left text-text-muted border-b border-border section-label">
                 <th className="py-2.5 px-3">Lane</th>
                 <th className="py-2.5 px-3">Provider</th>
                 <th className="py-2.5 px-3">Model</th>
@@ -86,7 +96,7 @@ export default function SystemStatusPage() {
                   <tr
                     key={i}
                     className={`border-b border-border/50 transition-colors ${
-                      switched ? 'bg-warning/10 text-warning' : 'hover:bg-bg-raised text-text'
+                      switched ? 'bg-[rgba(217,160,102,.10)] text-[#D9A066]' : 'hover:bg-white/5 text-text'
                     }`}
                   >
                     <td className="py-2.5 px-3 text-text-muted">{c.lane}</td>
@@ -97,7 +107,7 @@ export default function SystemStatusPage() {
                         className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-semibold ${
                           c.ok
                             ? 'border border-text/40 text-text'
-                            : 'bg-warning/20 border border-warning text-warning'
+                            : 'bg-[rgba(217,160,102,.15)] border border-[rgba(217,160,102,.4)] text-[#D9A066]'
                         }`}
                       >
                         {c.ok ? 'ok' : 'failed'}

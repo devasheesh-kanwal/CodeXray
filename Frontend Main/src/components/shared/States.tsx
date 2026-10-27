@@ -5,7 +5,7 @@ import { ApiError } from '../../api/client';
 export function Loading({ label = 'Loading…' }: { label?: string }) {
   return (
     <div
-      style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#8FA8A0', padding: '32px 0', fontSize: 14 }}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--text-muted, #8FA8A0)', padding: '32px 0', fontSize: 14 }}
     >
       <div
         style={{
@@ -13,7 +13,7 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
           height: 18,
           borderRadius: '50%',
           border: '2px solid rgba(255,255,255,.12)',
-          borderTopColor: '#DC1F1F',
+          borderTopColor: 'var(--accent, #DC1F1F)',
           animation: 'spin 0.75s linear infinite',
         }}
       />
@@ -27,18 +27,20 @@ export function EmptyState({ title, description }: { title: string; description?
   return (
     <div style={{ textAlign: 'center', padding: '64px 0' }}>
       <h3
+        className="card-title"
         style={{
           fontSize: 18,
           fontWeight: 600,
-          color: '#DFF5EB',
+          color: 'var(--text, #DFF5EB)',
           marginBottom: 8,
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: 'var(--font-heading)',
+          letterSpacing: '-0.01em',
         }}
       >
         {title}
       </h3>
       {description && (
-        <p style={{ fontSize: 13, color: '#8FA8A0', fontFamily: 'Inter, sans-serif' }}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted, #8FA8A0)', fontFamily: 'Inter, sans-serif' }}>
           {description}
         </p>
       )}
@@ -97,7 +99,7 @@ export function ErrorBanner({ message, onRetry, children }: { message: string; o
           style={{
             padding: '4px 12px',
             borderRadius: 6,
-            background: '#DC1F1F',
+            background: 'var(--accent, #DC1F1F)',
             color: '#fff',
             fontSize: 12,
             fontWeight: 600,

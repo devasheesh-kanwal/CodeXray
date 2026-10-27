@@ -9,11 +9,56 @@ import 'reactflow/dist/style.css';
 import type { TreeNode, TreeResponse, GraphData, FileSlice } from '../api/types';
 import { Folder, FileCode } from 'lucide-react';
 
+const G = {
+  card: {
+    background: 'rgba(255,255,255,.055)',
+    backdropFilter: 'blur(22px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(22px) saturate(160%)',
+    border: '1px solid rgba(255,255,255,.12)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,.10), 0 12px 44px rgba(0,0,0,.40)',
+    borderRadius: 14,
+    overflow: 'hidden' as const,
+    position: 'relative' as const,
+  },
+  dense: {
+    background: 'rgba(14,14,18,.74)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
+    border: '1px solid rgba(255,255,255,.10)',
+    borderRadius: 10,
+    overflow: 'hidden' as const,
+  },
+  input: {
+    width: '100%',
+    height: 36,
+    padding: '0 12px',
+    borderRadius: 10,
+    border: '1px solid rgba(255,255,255,.12)',
+    background: 'rgba(255,255,255,.07)',
+    color: '#DFF5EB',
+    fontSize: 12,
+    fontFamily: 'JetBrains Mono, monospace',
+    outline: 'none',
+    marginBottom: 12,
+  },
+  tabActive: {
+    padding: '5px 12px', borderRadius: 999, background: '#DC1F1F',
+    color: '#fff', fontSize: 12, fontFamily: 'Inter, sans-serif', fontWeight: 600, border: 'none', cursor: 'pointer',
+  },
+  tabIdle: {
+    padding: '5px 12px', borderRadius: 999, background: 'transparent',
+    color: '#8FA8A0', fontSize: 12, fontFamily: 'Inter, sans-serif', border: 'none', cursor: 'pointer',
+  },
+};
+
 export default function ExplorerPage() {
   const { selectedRepoId } = useRepo();
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  // The open file belongs to one repo; switching repos closes it.
+  const [openFile, setOpenFile] = useState<{ repo: string; path: string } | null>(null);
+  const selectedFile = openFile?.repo === selectedRepoId ? openFile.path : null;
+  const setSelectedFile = (path: string) => setOpenFile({ repo: selectedRepoId!, path });
   const [graphMode, setGraphMode] = useState<'imports' | 'calls'>('imports');
 
   const treeQ = useQuery({
@@ -36,7 +81,7 @@ export default function ExplorerPage() {
 
   if (!selectedRepoId) return <EmptyState title="Select a repository" description="Choose a repo in the top bar." />;
 
-  // imports link files; calls link functions/classes
+  // imports link files; calls link functions and classes
   const allNodes = (graphQ.data?.nodes || []).filter((n) => (graphMode === 'imports' ? n.type === 'file' : n.type !== 'file'));
   const nodes = expanded ? allNodes : allNodes.slice(0, 20);
   const rfNodes = nodes.map((n, i) => ({
@@ -44,14 +89,13 @@ export default function ExplorerPage() {
     data: { label: n.label },
     position: { x: (i % 3) * 160 + 30, y: Math.floor(i / 3) * 80 + 30 },
     style: {
-      background: '#0A0A0A',
-      color: '#CFF1E6',
-      border: '1px solid rgba(207, 241, 230, 0.35)',
-      borderRadius: '999px',
+      background: 'rgba(14,14,18,.85)',
+      color: '#DFF5EB',
+      border: '1px solid rgba(255,255,255,.14)',
+      borderRadius: 999,
       padding: '6px 14px',
       fontSize: '12px',
       fontFamily: "'JetBrains Mono', monospace",
-      boxShadow: '0 2px 10px rgba(0,0,0,0.7)',
     },
   }));
 
@@ -62,33 +106,34 @@ export default function ExplorerPage() {
       id: e.source + e.target,
       source: e.source,
       target: e.target,
-      style: {
-        stroke: 'rgba(255, 255, 255, 0.20)', // --border-strong
-        strokeWidth: 1.5,
-        strokeDasharray: e.type === 'calls' ? '5 5' : undefined,
-      },
+      style: { stroke: 'rgba(217,160,102,.35)', strokeWidth: 1.5, strokeDasharray: e.type === 'calls' ? '5 5' : undefined },
     }));
 
   function renderTree(node: TreeNode, depth = 0): React.ReactNode {
-    if (query && node.type === 'file' && !node.name.toLowerCase().includes(query.toLowerCase())) return null;
+    const isDir = node.type === 'folder';
+    if (query && !isDir && !node.name.toLowerCase().includes(query.toLowerCase())) return null;
     return (
-      <div key={node.path} style={{ paddingLeft: depth * 12 }}>
-        {node.type === 'folder' ? (
-          <div className="text-xs font-mono font-medium text-text py-1 flex items-center gap-1.5">
-            <Folder size={13} className="text-text-muted" />
+      <div key={node.path || node.name} style={{ paddingLeft: depth * 12 }}>
+        {isDir ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 0', fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: '#DFF5EB' }}>
+            <Folder size={12} style={{ color: '#8FA8A0' }} />
             <span>{node.name}/</span>
           </div>
         ) : (
           <button
             onClick={() => setSelectedFile(node.path)}
-            className={`text-xs font-mono py-1 px-1.5 rounded transition-colors flex items-center gap-1.5 w-full text-left truncate cursor-pointer ${
-              selectedFile === node.path
-                ? 'bg-accent-soft text-text font-medium border-l-2 border-accent'
-                : 'text-text-muted hover:text-text hover:bg-bg-raised'
-            }`}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '4px 6px', borderRadius: 6, width: '100%', textAlign: 'left',
+              fontSize: 12, fontFamily: 'JetBrains Mono, monospace', cursor: 'pointer', border: 'none',
+              background: selectedFile === node.path ? 'rgba(220,31,31,.15)' : 'transparent',
+              color: selectedFile === node.path ? '#DFF5EB' : '#8FA8A0',
+              borderLeft: selectedFile === node.path ? '2px solid #DC1F1F' : '2px solid transparent',
+              transition: 'all 0.15s',
+            }}
           >
-            <FileCode size={13} className="shrink-0 text-text-faint" />
-            <span className="truncate">{node.name}</span>
+            <FileCode size={12} style={{ color: 'rgba(143,168,160,.5)', flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
           </button>
         )}
         {node.children.map((c) => renderTree(c, depth + 1))}
@@ -97,108 +142,87 @@ export default function ExplorerPage() {
   }
 
   return (
-    <div className="grid grid-cols-12 gap-6 font-sans">
-      {/* File Tree */}
-      <div className="col-span-3 bg-bg-surface border border-border rounded-[14px] p-4 flex flex-col h-[580px]">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search files…"
-          className="w-full h-9 px-3 rounded-[10px] border border-border bg-bg-raised text-text placeholder:text-text-faint text-xs font-mono mb-3 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent-soft"
-        />
-        <div className="flex-1 overflow-auto">
-          {treeQ.isLoading && <Loading />}
-          {treeQ.isError && <ApiErrorView error={treeQ.error} onRetry={() => treeQ.refetch()} />}
-          {treeQ.data && renderTree(treeQ.data.root)}
-        </div>
+    <div>
+      {/* Page title */}
+      <div style={{ marginBottom: 28 }}>
+        <h1 className="page-title" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '0 12px' }}>
+          <span className="page-title-accent">EXPLORE</span>
+          <span>your codebase</span>
+        </h1>
+        <div style={{ width: 40, height: 1, background: 'rgba(255,255,255,.12)', margin: '14px 0' }} />
+        <p style={{ color: '#8FA8A0', fontSize: 13 }}>Browse the syntax tree, file contents, and dependency graph</p>
       </div>
 
-      {/* Graph Canvas */}
-      <div className="col-span-5 bg-bg-surface border border-border rounded-[14px] p-4 h-[580px] flex flex-col">
-        <div className="flex items-center justify-between mb-3 px-1">
-          {/* Segmented Control */}
-          <div className="bg-bg-raised p-1 rounded-full inline-flex border border-border">
-            <button
-              type="button"
-              onClick={() => setGraphMode('imports')}
-              className={`px-3 py-1 rounded-full text-xs font-sans font-medium transition-colors cursor-pointer ${
-                graphMode === 'imports' ? 'bg-accent text-white' : 'text-text-muted hover:text-text'
-              }`}
-            >
-              imports
-            </button>
-            <button
-              type="button"
-              onClick={() => setGraphMode('calls')}
-              className={`px-3 py-1 rounded-full text-xs font-sans font-medium transition-colors cursor-pointer ${
-                graphMode === 'calls' ? 'bg-accent text-white' : 'text-text-muted hover:text-text'
-              }`}
-            >
-              calls
-            </button>
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 5fr 4fr', gap: 20 }}>
+        {/* File Tree */}
+        <div style={{ ...G.card, padding: 14, height: 580, display: 'flex', flexDirection: 'column' }}>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search files…" style={G.input} />
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {treeQ.isLoading && <Loading />}
+            {treeQ.isError && <ApiErrorView error={treeQ.error} onRetry={() => treeQ.refetch()} />}
+            {treeQ.data && renderTree(treeQ.data.root)}
           </div>
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="px-3 py-1 rounded-full text-xs font-sans font-medium border border-border bg-bg-raised text-text-muted hover:text-text transition-colors cursor-pointer"
-          >
-            {expanded ? 'Collapse' : 'Expand'}
-          </button>
         </div>
 
-        {graphQ.isLoading && <Loading />}
-        {graphQ.isError && <ApiErrorView error={graphQ.error} onRetry={() => graphQ.refetch()} />}
-
-        {/* Graph view container with --bg-deep background */}
-        <div className="flex-1 bg-bg-deep rounded-[10px] border border-border overflow-hidden relative">
-          <ReactFlow nodes={rfNodes} edges={rfEdges} fitView>
-            <Background color="rgba(255,255,255,0.08)" gap={16} />
-            <Controls />
-            <MiniMap
-              style={{
-                background: '#0A0A0A',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '8px',
-              }}
-              nodeColor="#CFF1E6"
-              maskColor="rgba(0,0,0,0.7)"
-            />
-          </ReactFlow>
-        </div>
-
-        {/* Legend */}
-        <div className="flex gap-5 text-xs font-mono text-text-muted px-1 mt-2.5 pt-2 border-t border-border">
-          <span className="flex items-center gap-2">
-            <span className="inline-block w-4 h-0.5 bg-border-strong" />
-            <span>import (solid)</span>
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="inline-block w-4 h-0.5 border-t border-dashed border-border-strong" />
-            <span>call (dashed)</span>
-          </span>
-        </div>
-      </div>
-
-      {/* Code Viewer */}
-      <div className="col-span-4 h-[580px] overflow-auto">
-        {selectedFile ? (
-          fileQ.isLoading ? (
-            <Loading />
-          ) : fileQ.isError ? (
-            <ApiErrorView error={fileQ.error} onRetry={() => fileQ.refetch()} />
-          ) : fileQ.data ? (
-            <div className="space-y-2">
-              <div className="text-xs font-mono text-text-muted px-1 truncate">
-                {selectedFile}
-              </div>
-              <CodeViewer code={fileQ.data.lines.join('\n')} language="python" startLine={fileQ.data.start} />
+        {/* Graph Canvas */}
+        <div style={{ ...G.card, padding: 14, height: 580, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.10)', borderRadius: 999, display: 'inline-flex', padding: 3 }}>
+              <button type="button" onClick={() => setGraphMode('imports')} style={graphMode === 'imports' ? G.tabActive : G.tabIdle}>imports</button>
+              <button type="button" onClick={() => setGraphMode('calls')} style={graphMode === 'calls' ? G.tabActive : G.tabIdle}>calls</button>
             </div>
-          ) : null
-        ) : (
-          <div className="bg-bg-surface border border-border rounded-[14px] p-8 h-full flex items-center justify-center">
-            <EmptyState title="Select a file" description="Click a file in the tree to inspect code." />
+            <button type="button" onClick={() => setExpanded((v) => !v)}
+              style={{ padding: '5px 12px', borderRadius: 999, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(255,255,255,.06)', color: '#8FA8A0', fontSize: 12, fontFamily: 'Inter, sans-serif', cursor: 'pointer' }}>
+              {expanded ? 'Collapse' : 'Expand'}
+            </button>
           </div>
-        )}
+
+          {graphQ.isLoading && <Loading />}
+          {graphQ.isError && <ApiErrorView error={graphQ.error} onRetry={() => graphQ.refetch()} />}
+
+          <div style={{ ...G.dense, flex: 1 }}>
+            <ReactFlow nodes={rfNodes} edges={rfEdges} fitView>
+              <Background color="rgba(255,255,255,.06)" gap={16} />
+              <Controls />
+              <MiniMap
+                style={{ background: 'rgba(14,14,18,.85)', border: '1px solid rgba(255,255,255,.10)', borderRadius: 8 }}
+                nodeColor="#D9A066"
+                maskColor="rgba(0,0,0,.7)"
+              />
+            </ReactFlow>
+          </div>
+
+          <div style={{ display: 'flex', gap: 20, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#8FA8A0', marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,.08)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-block', width: 16, height: 1.5, background: 'rgba(217,160,102,.5)' }} />solid = import
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-block', width: 16, height: 1.5, borderTop: '1px dashed rgba(217,160,102,.5)' }} />dashed = call
+            </span>
+          </div>
+        </div>
+
+        {/* Code Viewer */}
+        <div style={{ height: 580, overflowY: 'auto' }}>
+          {selectedFile ? (
+            fileQ.isLoading ? (
+              <Loading />
+            ) : fileQ.isError ? (
+              <ApiErrorView error={fileQ.error} onRetry={() => fileQ.refetch()} />
+            ) : fileQ.data ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#8FA8A0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedFile}
+                </div>
+                <CodeViewer code={fileQ.data.lines.join('\n')} language="python" startLine={fileQ.data.start} />
+              </div>
+            ) : null
+          ) : (
+            <div style={{ ...G.card, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+              <EmptyState title="Select a file" description="Click a file in the tree to inspect code." />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
