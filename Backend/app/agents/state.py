@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, PrivateAttr
 
+from app.atomic import write_text_atomic
+
 WorkflowKind = Literal["qa", "review", "repair"]
 EventKind = Literal[
     "agent_started",
@@ -112,9 +114,7 @@ class RunState(BaseModel):
         if self._runs_dir is None:
             return
         self._runs_dir.mkdir(parents=True, exist_ok=True)
-        tmp = self._runs_dir / f"{self.run_id}.json.tmp"
-        tmp.write_text(self.model_dump_json(indent=1), encoding="utf-8")
-        tmp.replace(self._runs_dir / f"{self.run_id}.json")
+        write_text_atomic(self._runs_dir / f"{self.run_id}.json", self.model_dump_json(indent=1))
 
     @classmethod
     def load(cls, runs_dir: Path, run_id: str) -> "RunState | None":

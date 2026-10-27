@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.api.schemas.repos import RepoStage
+from app.atomic import write_text_atomic
 
 CLONE_TIMEOUT_S = 300
 GIT_URL = re.compile(r"^(https://|ssh://|git@)[^\s]+$")
@@ -112,9 +113,7 @@ def save_meta(data_dir: Path, meta: RepoMeta) -> None:
     meta.updated_at = datetime.now(UTC)
     folder = repo_dir(data_dir, meta.repo_id)
     folder.mkdir(parents=True, exist_ok=True)
-    tmp = folder / "meta.json.tmp"
-    tmp.write_text(meta.model_dump_json(indent=2), encoding="utf-8")
-    tmp.replace(folder / "meta.json")  # atomic: readers never see half a file
+    write_text_atomic(folder / "meta.json", meta.model_dump_json(indent=2))
 
 
 def load_meta(data_dir: Path, repo_id: str) -> RepoMeta | None:
