@@ -19,7 +19,7 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -.04em; }
 
 .workflow { display: grid; justify-items: center; gap: 22px; margin: 0 auto; padding: 0; list-style: none; }
 .step { position: relative; display: grid; gap: 6px; width: min(100%, 430px); padding: 18px 24px; border: 1px solid #77736d; border-radius: 12px; background: #f0eee8; text-align: center; }
-.step:not(:last-child)::after { position: absolute; top: 100%; left: 50%; height: 22px; border-left: 2px solid #88858a; content: ""; }
+.step:not(:last-child)::after { position: absolute; top: 100%; left: 50%; width: 2px; height: 22px; background: #88858a; content: ""; transform: translateX(-50%); }
 .step strong { font-size: 1.2rem; }
 .step span { color: #696670; }
 .step.agent { border-color: #6659ad; background: #eeecfb; }

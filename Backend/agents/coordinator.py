@@ -5,11 +5,15 @@ from agents.repair_agent import propose_repair
 from agents.review_agent import review
 from agents.worker import evaluate
 
+TASKS = {"architecture", "review", "repair", "evaluate"}
+
 
 def handle(task: str, question: str, context: str) -> dict:
     if task == "architecture":
         return {"task": task, "answer": architecture_answer(question, context)}
     if task == "review":
+        # `question` carries the diff under review; retrieved repository context
+        # supplements it rather than replacing it.
         return {"task": task, "review": review(question, context)}
     if task == "repair":
         return {"task": task, "proposal": propose_repair(question, context)}

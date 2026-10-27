@@ -3,7 +3,9 @@
 import ast
 from pathlib import Path
 
-SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__"}
+# Directories ignored by both the skeleton index and retrieval.
+SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache",
+             ".mypy_cache", "dist", "build"}
 
 
 def build_index(root: Path) -> list[dict]:

@@ -4,7 +4,7 @@ CodeXray is a small repository assistant prototype. Its backend indexes Python s
 
 ## Run the backend
 
-Provider credentials and defaults can be set in the root `.env` file. The backend loads it automatically; process environment values take precedence. `LLM_PROVIDER=auto` tries configured providers in the order in `LLM_FALLBACK_PROVIDERS`. For a single preferred provider, set `LLM_PROVIDER` to `nvidia`, `groq`, `gemini`, `openrouter`, `deepseek`, or `ollama`.
+Provider credentials and defaults can be set in the root `.env` file (copy `.env.example` to start). The backend loads it automatically; process environment values take precedence. `LLM_PROVIDER=auto` tries configured providers in the order in `LLM_FALLBACK_PROVIDERS`. For a single preferred provider, set `LLM_PROVIDER` to `nvidia`, `groq`, `gemini`, `openrouter`, `deepseek`, or `ollama`.
 
 Run from the repository root:
 
@@ -12,7 +12,7 @@ Run from the repository root:
 python Backend/main.py
 ```
 
-For key rotation, use comma-separated variables such as `GROQ_API_KEYS` or `NVIDIA_API_KEYS`; the singular `*_API_KEY` form also works. Invalid credentials are cooled down for an hour, rate-limited credentials for one minute, and transient failures for 20 seconds. The client then tries the next key and provider. Cooldowns reset when the process restarts. Failed attempts only log provider names and HTTP status codes, never key values or provider response bodies.
+For key rotation, use comma-separated variables such as `GROQ_API_KEYS` or `NVIDIA_API_KEYS`; the singular `*_API_KEY` form also works. Invalid credentials (HTTP 401/403) are cooled down for an hour and rate-limited credentials (429) for one minute. Network-level failures such as DNS blips, timeouts, or connection resets do **not** cool keys down, so a dead network path cannot lock out valid credentials. Total attempts per request are capped by `LLM_MAX_ATTEMPTS` (default 6) and wall time by `LLM_TOTAL_TIMEOUT_SECONDS` (default 120). Cooldowns reset when the process restarts. Failed attempts only log provider names and HTTP status codes, never key values or provider response bodies.
 
 Default model IDs are set in `.env` and can be overridden with `NVIDIA_MODEL`, `GROQ_MODEL`, `GEMINI_MODEL`, `OPENROUTER_MODEL`, `DEEPSEEK_MODEL`, or `OLLAMA_MODEL`. Provider quotas and free access vary: OpenRouter's `openrouter/free` routes to currently available free models; NVIDIA's selected NIM endpoint is listed as a free prototype endpoint; Gemini's free tier has limited model access; Groq has developer-tier quotas; DeepSeek direct API is metered; Ollama Cloud may consume starter credits or paid credits. Failover does not guarantee free service or separate quotas across keys.
 
@@ -23,7 +23,7 @@ The server defaults to `http://127.0.0.1:8000`; set `HOST` or `PORT` to change t
 ## API
 
 - `GET /health` returns service status.
-- `POST /agent` accepts a JSON body with `task`, `prompt`, and optional `token_budget`.
+- `POST /agent` accepts a JSON object body with `task`, `prompt`, and optional `token_budget` (a positive number).
 
 Available tasks: `architecture`, `review`, `repair`, and `evaluate`. Example:
 
