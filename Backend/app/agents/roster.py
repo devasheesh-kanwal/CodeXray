@@ -1,4 +1,4 @@
-"""The 7 LLM agents: one job each, with typed input/output, a lane and allowed tools.
+"""The 8 LLM agents: one job each, with typed input/output, a lane and allowed tools.
 
 Plain-code agents (Coordinator, Citation checker, Static analyzer, Test runner,
 Eval gate) are not here: they are ordinary functions in the workflows.
@@ -154,6 +154,41 @@ class Debugger(Agent):
         return f"root cause in {output.file}:{output.start_line}-{output.end_line}: {output.root_cause[:120]}"
 
 
+# ---------- Test writer: reproduction test when no test fails ----------
+
+
+class TestWriterInput(BaseModel):
+    __test__ = False  # not a pytest test class
+
+    run_id: str
+    issue: str
+    files: list[str] = Field(default_factory=list, description="Files the Architect picked")
+    test_file: str = Field(description="write_test writes this file at the repo root")
+    feedback: str = Field("", description="Why CodeXray did not accept the previous test")
+
+
+class TestWriterOutput(BaseModel):
+    __test__ = False
+
+    summary: str = Field(description="What the test checks, in one or two sentences")
+    tests: list[str] = Field(default_factory=list, description="Names of the test functions")
+
+
+class TestWriter(Agent):
+    __test__ = False
+
+    name = "test_writer"
+    lane = "heavy_code"
+    input_schema = TestWriterInput
+    output_schema = TestWriterOutput
+    allowed_tools = ("search_code", "read_skeleton", "read_file", "write_test")
+    max_steps = 6
+    max_output_tokens = 3000
+
+    def summarize(self, output: TestWriterOutput) -> str:
+        return f"wrote {', '.join(output.tests) or 'a test'}: {output.summary[:120]}"
+
+
 # ---------- Repair: write the patch ----------
 
 
@@ -195,6 +230,7 @@ class ReviewerInput(BaseModel):
     root_cause: str
     diff: str
     test_summary: str
+    repro_test: str = Field("", description="The test CodeXray wrote to reproduce the issue, if any")
 
 
 class ReviewerOutput(BaseModel):
@@ -247,5 +283,5 @@ class Summarizer(Agent):
 
 ROSTER: dict[str, type[Agent]] = {
     agent.name: agent
-    for agent in (Architect, Explainer, CodeReviewer, Debugger, Repair, Reviewer, Summarizer)
+    for agent in (Architect, Explainer, CodeReviewer, Debugger, TestWriter, Repair, Reviewer, Summarizer)
 }

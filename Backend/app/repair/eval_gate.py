@@ -3,6 +3,7 @@
 The patch passes only if every check passes. No LLM opinion can change this.
 """
 
+import hashlib
 import importlib.util
 import json
 import re
@@ -19,17 +20,35 @@ HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 RUFF_TIMEOUT_S = 60
 
 
-def evaluate(baseline: TestRun, after: TestRun, worktree: Path) -> EvalResult:
-    """Run every check on the worktree's current (uncommitted) patch."""
+def evaluate(baseline: TestRun, after: TestRun, worktree: Path, repro: dict | None = None) -> EvalResult:
+    """Run every check on the worktree's current (uncommitted) patch.
+
+    repro: the frozen reproduction test ({path, sha256, ...}) when CodeXray wrote one.
+    """
     diff = git_ops.worktree_diff(worktree)
     changed = git_ops.changed_files(worktree)
-    return EvalResult(checks=[
+    checks = [
         check_target_tests(baseline, after),
         check_no_regressions(baseline, after),
         check_lint(worktree, diff, changed),
         check_no_test_files(changed),
         check_patch_size(diff),
-    ])
+    ]
+    if repro:
+        checks.append(check_repro_unchanged(worktree, repro))
+    return EvalResult(checks=checks)
+
+
+def check_repro_unchanged(worktree: Path, repro: dict) -> EvalCheck:
+    """The reproduction test is byte-for-byte the one that failed before the fix."""
+    name = "repro_test_unchanged"
+    file = worktree / repro["path"]
+    if not file.is_file():
+        return EvalCheck(name=name, passed=False, detail=f"{repro['path']} was deleted.")
+    digest = hashlib.sha256(file.read_bytes()).hexdigest()
+    if digest != repro["sha256"]:
+        return EvalCheck(name=name, passed=False, detail=f"{repro['path']} was changed after it was frozen.")
+    return EvalCheck(name=name, passed=True, detail=f"{repro['path']} is the frozen reproduction test.")
 
 
 def passed(result: EvalResult) -> bool:

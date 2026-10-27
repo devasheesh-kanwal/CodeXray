@@ -149,6 +149,20 @@ export default function RepairPage() {
             </div>
           )}
 
+          {run?.repro_test && (
+            <div className="glass rounded-[12px] p-3.5 mb-4 border border-[rgba(217,160,102,.45)]" style={{ borderRadius: 12 }}>
+              <span className="section-label mb-1.5 block">Reproduction test — written by CodeXray</span>
+              <p className="text-xs text-[#D9A066] mb-2">
+                No existing test showed this bug, so an AI wrote this one. It failed on the original code and the
+                fix must make it pass unchanged. Check that it really tests the bug you described.
+              </p>
+              <div className="text-xs font-mono text-text-muted mb-1">{run.repro_test.path}</div>
+              <pre className="glass-dense p-4 rounded-[10px] text-mono text-xs text-text overflow-auto max-h-72">
+                {run.repro_test.code}
+              </pre>
+            </div>
+          )}
+
           {/* Timeline */}
           <div className="space-y-2.5 mb-6">
             {events.map((e, i) => {
@@ -181,6 +195,12 @@ export default function RepairPage() {
               <h2 className="card-title text-2xl text-text mb-3 tracking-tight">
                 Awaiting approval
               </h2>
+              {run?.repro_test && (
+                <p className="text-xs text-[#D9A066] mb-4">
+                  This patch was judged against the AI-written reproduction test shown above. Approving also adds
+                  that test to the approved branch.
+                </p>
+              )}
               <div className="mb-4">
                 <span className="section-label mb-1.5 block">
                   Proposed Diff

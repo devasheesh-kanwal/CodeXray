@@ -1,10 +1,11 @@
-"""Tools agents can call. All are read-only except write_patch.
+"""Tools agents can call. All are read-only except write_patch and write_test.
 
 The registry checks the calling agent's allow-list, validates arguments with
 Pydantic, and truncates long results with a "[truncated]" marker. A refused
 or failed call returns an error result to the agent; it never raises.
 """
 
+import ast
 import inspect
 import json
 import logging
@@ -28,6 +29,7 @@ logger = logging.getLogger("codexray.agents")
 MAX_READ_LINES = 200
 GIT_TIMEOUT_S = 30
 MAX_PATCH_LINES = 80  # added + removed lines in one repair patch
+MAX_TEST_CHARS = 8000  # one reproduction test file
 
 
 class ToolError(Exception):
@@ -42,6 +44,7 @@ class ToolContext:
     worktree: Path | None = None  # repair runs only (Prompt 6)
     worktrees_root: Path | None = None  # data/worktrees; write_patch only works inside it
     allowed_files: list[str] | None = None  # repair: the Architect's files; None = no limit
+    test_file: str | None = None  # repair: the one new file write_test may create
     _searcher: RepoSearch | None = None
 
     def searcher(self) -> RepoSearch:
@@ -365,6 +368,38 @@ def write_patch(ctx: ToolContext, args: PatchArgs) -> ToolResult:
     return ToolResult(f"Patch applied to: {', '.join(paths)}", f"patched {len(paths)} file(s)")
 
 
+# ---------- write_test ----------
+
+
+class TestFileArgs(BaseModel):
+    __test__ = False  # not a pytest test class
+
+    code: str = Field(min_length=1, description="The complete Python source of the reproduction test file")
+
+
+def write_test(ctx: ToolContext, args: TestFileArgs) -> ToolResult:
+    """Write the run's reproduction test. The path is fixed by CodeXray, not chosen by the agent."""
+    if ctx.worktree is None or ctx.worktrees_root is None or ctx.test_file is None:
+        raise ToolError("write_test only works while CodeXray is writing a reproduction test")
+    worktree = ctx.worktree.resolve()
+    if not worktree.is_relative_to(ctx.worktrees_root.resolve()):
+        raise ToolError("refusing to write outside the repair worktrees folder")
+    if len(args.code) > MAX_TEST_CHARS:
+        raise ToolError(f"the test file is too long ({len(args.code)} characters, limit {MAX_TEST_CHARS})")
+    try:
+        tree = ast.parse(args.code)
+    except SyntaxError as exc:
+        raise ToolError(f"the test file is not valid Python: {exc}") from exc
+    if not any(isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name.startswith("test_")
+               for node in ast.walk(tree)):
+        raise ToolError("the file has no test function (its name must start with test_)")
+    code = args.code if args.code.endswith("\n") else args.code + "\n"
+    (worktree / ctx.test_file).write_bytes(code.encode("utf-8"))  # bytes: keep LF on Windows
+    ctx.state.artifacts["repro_code"] = code
+    return ToolResult(f"Wrote {ctx.test_file}. CodeXray now runs it on the unpatched code.",
+                      f"wrote {ctx.test_file}")
+
+
 def _reject(ctx: ToolContext, reason: str, policy: bool = True) -> None:
     """Record why a patch was refused (the repair workflow reads this), then refuse it.
 
@@ -390,4 +425,6 @@ def default_registry() -> ToolRegistry:
              TestOutputArgs, read_test_output, 2000),
         Tool("write_patch", "Apply a unified diff to the repair worktree (never test files).",
              PatchArgs, write_patch, 300),
+        Tool("write_test", "Write the complete reproduction test file (replaces your earlier version).",
+             TestFileArgs, write_test, 300),
     ])

@@ -14,7 +14,7 @@ from pathlib import Path
 from app.agents.coordinator import Coordinator
 from app.agents.state import RunEvent, RunState
 from app.agents.tools import ToolRegistry
-from app.api.schemas.repair import EvalResult, RepairEvent, RepairRun
+from app.api.schemas.repair import EvalResult, RepairEvent, RepairRun, ReproTest
 from app.api.sse import sse_event
 from app.config import Settings
 from app.errors import ApiError, not_found
@@ -39,6 +39,7 @@ STATE_MESSAGES = {
     "BASELINE": "Running the tests on the current checkout to confirm the failure.",
     "PLANNING": "Architect is picking the files to change.",
     "BRANCHED": "Creating a git worktree branch for the fix.",
+    "REPRODUCING": "No test shows the bug yet: the Test writer is writing a reproduction test.",
     "DIAGNOSING": "Debugger is looking for the root cause.",
     "PATCHING": "Repair agent is writing a patch.",
     "TESTING": "Running the tests on the patched branch.",
@@ -185,6 +186,7 @@ class RepairService:
             eval=EvalResult.model_validate(a["eval"]) if a.get("eval") else None,
             reviewer_notes=reviewer_notes(a.get("review")),
             root_cause=(a.get("hypothesis") or {}).get("root_cause"),
+            repro_test=ReproTest(path=a["repro"]["path"], code=a["repro"]["code"]) if a.get("repro") else None,
             events=to_repair_events(state),
         )
 

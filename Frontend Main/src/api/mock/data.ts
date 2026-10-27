@@ -190,6 +190,7 @@ export const mockRepairRun: RepairRun = {
   },
   reviewer_notes: 'The fix handles the missing row at the right place.',
   root_cause: 'delete_todo never checks the result of fetchone(), so a missing todo raises TypeError (500).',
+  repro_test: null,
   events: mockRepairEvents,
 };
 

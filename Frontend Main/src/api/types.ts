@@ -97,7 +97,7 @@ export type Rule = {
 export type RulesResponse = { rules: Rule[] };
 
 export type RepairState =
-  | 'CREATED' | 'BASELINE' | 'PLANNING' | 'BRANCHED' | 'DIAGNOSING' | 'PATCHING' | 'TESTING'
+  | 'CREATED' | 'BASELINE' | 'PLANNING' | 'BRANCHED' | 'REPRODUCING' | 'DIAGNOSING' | 'PATCHING' | 'TESTING'
   | 'EVALUATING' | 'REVIEWING' | 'AWAITING_APPROVAL' | 'MERGED' | 'REJECTED' | 'FAILED' | 'CLEANUP';
 
 export type RepairEvent = {
@@ -112,6 +112,9 @@ export type RepairEvent = {
 
 export type EvalCheck = { name: string; passed: boolean; detail: string };
 
+/** The test CodeXray wrote when no existing test showed the bug; the fix is judged against it. */
+export type ReproTest = { path: string; code: string };
+
 export type RepairRun = {
   state: RepairState;
   attempt: number;
@@ -120,6 +123,7 @@ export type RepairRun = {
   eval: { checks: EvalCheck[] } | null;
   reviewer_notes: string | null;
   root_cause: string | null;
+  repro_test: ReproTest | null;
   events: RepairEvent[];
 };
 

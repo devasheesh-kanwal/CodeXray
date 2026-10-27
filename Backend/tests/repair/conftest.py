@@ -16,6 +16,7 @@ from app.llm import LLMRouter
 from app.llm.routes import LaneEntry
 from app.repair.sandbox import Sandbox
 from app.repair.service import RepairService
+from app.repair.workflow import RepairWorkflow
 from tests.conftest import make_settings
 from tests.llm.fakes import FakeProviders, ok
 
@@ -98,6 +99,35 @@ def patch(diff: str, attempt: int = 1):
             final({"summary": f"attempt {attempt}: fixed the slice", "files_changed": ["inventory/stock.py"]})]
 
 
+# A correct reproduction test: fails on the bug (returns ["pear"]), passes after FIX.
+REPRO_OK = """from inventory.stock import top_sellers
+
+
+def test_top_sellers_returns_two_items():
+    assert top_sellers({"pear": 5, "apple": 3, "fig": 1}, 2) == ["pear", "apple"]
+"""
+# Passes on the buggy code, so it shows nothing.
+REPRO_PASSES = """from inventory.stock import total_units
+
+
+def test_total_units():
+    assert total_units({"pear": 5}) == 5
+"""
+# Fails, but only because a package is missing: not the bug.
+REPRO_IMPORT_ERROR = """import package_that_is_not_installed
+
+
+def test_top_sellers():
+    assert package_that_is_not_installed
+"""
+
+
+def writes_test(code: str):
+    """The Test writer's two replies: write_test, then its final answer."""
+    return [tool_call("write_test", {"code": code}),
+            final({"summary": "top_sellers(sales, 2) should return two items", "tests": ["test_top_sellers"]})]
+
+
 def review(verdict: str = "approve", notes: str = "Looks good."):
     return final({"verdict": verdict, "risk": "low", "notes": notes, "concerns": []})
 
@@ -145,9 +175,11 @@ class Kit:
         return git(self.repo, "branch", "--format=%(refname:short)").split()
 
 
-def make_kit(tmp_path: Path, lanes=None) -> Kit:
+def make_kit(tmp_path: Path, lanes=None, without_tests: bool = False) -> Kit:
     repo = tmp_path / "shop_repo"
     shutil.copytree(FIXTURE, repo)
+    if without_tests:  # a repo like most hobby projects: no tests at all
+        shutil.rmtree(repo / "tests")
     git(repo, "init", "-q", "-b", "main")
     git(repo, "add", "-A")
     git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "initial")
@@ -162,6 +194,12 @@ def make_kit(tmp_path: Path, lanes=None) -> Kit:
     router = LLMRouter(settings, lanes=lanes or LANES, transport=fake.transport())
     service = RepairService(settings, index, router, Sandbox(timeout_s=60, use_docker=False))
     return Kit(service, fake, repo, meta.repo_id, settings.data_path)
+
+
+@pytest.fixture(autouse=True)
+def no_review_retry_wait(monkeypatch):
+    """The Reviewer's retry would wait for a cooldown; tests never sleep."""
+    monkeypatch.setattr(RepairWorkflow, "review_retry_max_wait_s", 0.0)
 
 
 @pytest.fixture

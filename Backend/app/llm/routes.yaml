@@ -37,3 +37,10 @@ lanes:
     - {provider: gemini, model: gemini-3.5-flash-lite, max_context: 1048576}
     - {provider: openrouter, model: "nvidia/nemotron-3-ultra-550b-a55b:free", max_context: 1000000}
     - {provider: groq, model: openai/gpt-oss-120b, max_context: 131072}
+    # Added 2026-10-27: Gemini and Nemotron were rate limited and Repair had used the
+    # other entries, so no reviewer was left. More providers, and gpt-oss-20b, which
+    # Repair never uses (heavy_code does not list it), so it is never excluded.
+    - {provider: groq, model: qwen/qwen3.8-27b, max_context: 131072}
+    - {provider: groq, model: openai/gpt-oss-20b, max_context: 131072}
+    - {provider: openrouter, model: "poolside/laguna-s-2.1:free", max_context: 262144}
+    - {provider: openrouter, model: "cohere/north-mini-code:free", max_context: 256000}

@@ -10,6 +10,7 @@ RepairState = Literal[
     "BASELINE",
     "PLANNING",
     "BRANCHED",
+    "REPRODUCING",
     "DIAGNOSING",
     "PATCHING",
     "TESTING",
@@ -59,6 +60,13 @@ class EvalResult(BaseModel):
     checks: list[EvalCheck]
 
 
+class ReproTest(BaseModel):
+    """The reproduction test CodeXray wrote when no existing test showed the bug."""
+
+    path: str
+    code: str
+
+
 class RepairRun(BaseModel):
     state: RepairState
     attempt: int = Field(ge=1)
@@ -67,4 +75,5 @@ class RepairRun(BaseModel):
     eval: EvalResult | None = None
     reviewer_notes: str | None = None
     root_cause: str | None = None
+    repro_test: ReproTest | None = None
     events: list[RepairEvent]
