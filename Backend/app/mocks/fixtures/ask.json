@@ -1,0 +1,58 @@
+{
+  "answer": "Every todo endpoint is wrapped in the login_required decorator [app/auth.py:12-25]. It reads the 'Authorization: Bearer <token>' header, looks the token up with verify_token [app/auth.py:6-9], and aborts with 401 if the token is unknown; otherwise it stores the user name in g.user. The routes then use g.user to scope their queries to the caller, for example list_todos only selects rows whose owner matches [app/routes.py:12-16]. Valid tokens come from the API_TOKENS setting in config.Config.",
+  "citations": [
+    {
+      "file": "app/auth.py",
+      "start_line": 12,
+      "end_line": 25,
+      "why": "Defines login_required, which checks the bearer token and sets g.user."
+    },
+    {
+      "file": "app/auth.py",
+      "start_line": 6,
+      "end_line": 9,
+      "why": "verify_token maps a token to a user name using the API_TOKENS config."
+    },
+    {
+      "file": "app/routes.py",
+      "start_line": 12,
+      "end_line": 16,
+      "why": "list_todos filters rows by owner = g.user, showing how the user is used."
+    }
+  ],
+  "confidence": 0.86,
+  "not_found": false,
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
+  "cached": false,
+  "agent_trace": [
+    {
+      "agent": "architect",
+      "step": 1,
+      "action": "search_symbols",
+      "summary": "Searched the skeleton for auth-related symbols; found login_required and verify_token in app/auth.py.",
+      "ms": 410
+    },
+    {
+      "agent": "architect",
+      "step": 2,
+      "action": "find_callers",
+      "summary": "Graph shows login_required is applied to all three routes in app/routes.py.",
+      "ms": 120
+    },
+    {
+      "agent": "explainer",
+      "step": 3,
+      "action": "read_file",
+      "summary": "Read app/auth.py:1-25 and app/routes.py:10-16 and wrote the answer.",
+      "ms": 2380
+    },
+    {
+      "agent": "citation_checker",
+      "step": 4,
+      "action": "verify_citations",
+      "summary": "3 of 3 citations exist in the index and match the cited line ranges.",
+      "ms": 15
+    }
+  ]
+}

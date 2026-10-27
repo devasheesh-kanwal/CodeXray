@@ -1,0 +1,35 @@
+# Fallback chains ("lanes"). The router tries entries top to bottom.
+# max_context = the model's context window in tokens (from Groq/OpenRouter
+# model lists and Google's model pages).
+# Every entry answered a real request on 2026-10-27 (scripts/check_providers.py).
+# Not used for now: NVIDIA (models 404 "not found for account" or time out)
+# and DeepSeek (402 insufficient balance). Re-add them once they answer.
+# Run scripts/check_providers.py after changing anything here.
+
+lanes:
+  # PR review, writing patches
+  heavy_code:
+    - {provider: groq, model: openai/gpt-oss-120b, max_context: 131072}
+    - {provider: groq, model: qwen/qwen3.8-27b, max_context: 131072}
+    - {provider: openrouter, model: "poolside/laguna-s-2.1:free", max_context: 262144}
+    - {provider: openrouter, model: "cohere/north-mini-code:free", max_context: 256000}
+
+  # Q&A over a lot of code
+  long_context:
+    - {provider: gemini, model: gemini-3.6-flash, max_context: 1048576}
+    - {provider: openrouter, model: "nvidia/nemotron-3-ultra-550b-a55b:free", max_context: 1000000}
+    - {provider: gemini, model: gemini-3.5-flash-lite, max_context: 1048576}
+
+  # Summaries, picking files, query rewriting
+  fast_small:
+    - {provider: groq, model: openai/gpt-oss-20b, max_context: 131072}
+    - {provider: groq, model: qwen/qwen3.8-27b, max_context: 131072}
+    - {provider: gemini, model: gemini-3.5-flash-lite, max_context: 1048576}
+    - {provider: openrouter, model: "nvidia/nemotron-3.5-lightning:free", max_context: 1000000}
+
+  # Second opinions on patches. Called with exclude_models = the patch author.
+  # The first two never appear in heavy_code, so they are always independent.
+  reviewer:
+    - {provider: gemini, model: gemini-3.6-flash, max_context: 1048576}
+    - {provider: openrouter, model: "nvidia/nemotron-3-ultra-550b-a55b:free", max_context: 1000000}
+    - {provider: groq, model: openai/gpt-oss-120b, max_context: 131072}

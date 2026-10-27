@@ -1,0 +1,47 @@
+{
+  "providers": [
+    {"name": "groq", "state": "cooldown", "cooldown_until": "2026-10-27T10:15:30Z"},
+    {"name": "nvidia", "state": "available", "cooldown_until": null},
+    {"name": "gemini", "state": "available", "cooldown_until": null},
+    {"name": "openrouter", "state": "available", "cooldown_until": null},
+    {"name": "deepseek", "state": "available", "cooldown_until": null}
+  ],
+  "recent_calls": [
+    {
+      "lane": "explain",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile",
+      "ok": true,
+      "switch_reason": null,
+      "latency_ms": 2380,
+      "cached": false
+    },
+    {
+      "lane": "explain",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile",
+      "ok": true,
+      "switch_reason": null,
+      "latency_ms": 4,
+      "cached": true
+    },
+    {
+      "lane": "review",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile",
+      "ok": false,
+      "switch_reason": null,
+      "latency_ms": 310,
+      "cached": false
+    },
+    {
+      "lane": "review",
+      "provider": "nvidia",
+      "model": "meta/llama-3.1-70b-instruct",
+      "ok": true,
+      "switch_reason": "groq rate limited (429); cooling down for 60 s",
+      "latency_ms": 4120,
+      "cached": false
+    }
+  ]
+}

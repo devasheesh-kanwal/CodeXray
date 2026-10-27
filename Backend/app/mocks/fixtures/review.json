@@ -1,0 +1,83 @@
+{
+  "summary": "The diff adds GET /api/todos/search in app/routes.py. It is protected by login_required, but it builds SQL with an f-string (SQL injection), returns an unbounded list, and has no test. 1 critical, 2 medium, 1 low.",
+  "findings": [
+    {
+      "id": "F1",
+      "category": "security",
+      "severity": "critical",
+      "file": "app/routes.py",
+      "line": 52,
+      "title": "SQL query built with an f-string",
+      "explanation": "The query interpolates the 'q' query parameter and g.user directly into the SQL string. A request like ?q=' OR '1'='1 returns every user's todos (bandit B608). This also breaks design rule R2.",
+      "suggested_fix": "Use placeholders: db.execute(\"SELECT * FROM todos WHERE owner = ? AND title LIKE ?\", (g.user, f\"%{q}%\"))",
+      "source": "bandit",
+      "confidence": 0.95
+    },
+    {
+      "id": "F2",
+      "category": "design",
+      "severity": "medium",
+      "file": "app/routes.py",
+      "line": 51,
+      "title": "Search results are not bounded",
+      "explanation": "The endpoint returns every matching row. Design rule R3 requires list endpoints to apply a LIMIT.",
+      "suggested_fix": "Add 'LIMIT ?' with a max page size (for example 50) and accept an optional 'limit' query parameter capped at that value.",
+      "source": "rule",
+      "confidence": 0.9
+    },
+    {
+      "id": "F3",
+      "category": "bug",
+      "severity": "medium",
+      "file": "app/routes.py",
+      "line": 50,
+      "title": "LIKE wildcards in the search term are not escaped",
+      "explanation": "Searching for '%' or '_' matches every todo because the term is used as a LIKE pattern without escaping.",
+      "suggested_fix": "Escape '!', '%' and '_' in q with a '!' prefix before building the pattern, and add ESCAPE '!' to the LIKE clause.",
+      "source": "llm",
+      "confidence": 0.7
+    },
+    {
+      "id": "F4",
+      "category": "practice",
+      "severity": "low",
+      "file": "app/routes.py",
+      "line": 49,
+      "title": "New endpoint has no test",
+      "explanation": "tests/test_routes.py does not exercise /api/todos/search, so the injection and the empty-result case are untested.",
+      "suggested_fix": "Add tests for a normal search, a search with no matches, and a search containing a quote character.",
+      "source": "llm",
+      "confidence": 0.8
+    }
+  ],
+  "agent_trace": [
+    {
+      "agent": "architect",
+      "step": 1,
+      "action": "map_impact",
+      "summary": "Diff touches app/routes.py only; new route search_todos calls get_db and Todo.from_row.",
+      "ms": 640
+    },
+    {
+      "agent": "static_analyzer",
+      "step": 2,
+      "action": "run_ruff_bandit",
+      "summary": "ruff: 0 issues. bandit: 1 issue (B608 at app/routes.py:52).",
+      "ms": 1830
+    },
+    {
+      "agent": "static_analyzer",
+      "step": 3,
+      "action": "check_rules",
+      "summary": "Rule R3 (list endpoints are bounded) violated at app/routes.py:51.",
+      "ms": 40
+    },
+    {
+      "agent": "code_reviewer",
+      "step": 4,
+      "action": "review_diff",
+      "summary": "Confirmed the bandit finding and added 2 findings: unescaped LIKE wildcards and missing tests.",
+      "ms": 4120
+    }
+  ]
+}
