@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     mock_mode: bool = True
     demo_mode: bool = False
+    demo_repo_path: Path | None = None  # repo scripts/demo_prepare.py indexes and caches
     frontend_origin: str
     data_dir: Path = Path("data")
     llm_timeout_s: float = Field(default=30, gt=0)
