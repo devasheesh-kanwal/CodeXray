@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     not_found_threshold_bm25: float = Field(default=0.5, ge=0, le=1)  # bm25_only search
     qa_context_tokens: int = Field(default=12000, gt=0)  # snippets sent to the Explainer
 
+    # Repair: test runs in the sandbox (Docker image if Docker is available)
+    repair_test_timeout_s: float = Field(default=120, gt=0)
+    sandbox_image: str = "codexray-sandbox:latest"
+
     # Provider key lists: comma-separated in .env, e.g. GROQ_API_KEYS=key1,key2
     nvidia_api_keys: KeyList = Field(default_factory=list)
     groq_api_keys: KeyList = Field(default_factory=list)

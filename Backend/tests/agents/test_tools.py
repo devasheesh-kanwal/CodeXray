@@ -175,9 +175,24 @@ def test_write_patch_refuses_test_files(worktree_ctx):
     assert not result.ok and "test files must never be edited" in result.text
 
 
+def test_write_patch_refuses_files_outside_the_allowed_set(worktree_ctx):
+    worktree_ctx.allowed_files = ["shop/models.py"]
+    result = call(worktree_ctx, "write_patch", {"diff": PATCH})
+    assert not result.ok and "outside the Architect's set" in result.text
+    assert worktree_ctx.state.artifacts["patch_rejections"][-1]["policy"] is True
+
+
+def test_write_patch_refuses_patches_over_the_size_limit(worktree_ctx):
+    big = PATCH.replace("+# saved\n", "".join(f"+# line {i}\n" for i in range(80)))
+    big = big.replace("@@ -12,3 +12,5 @@", "@@ -12,3 +12,84 @@")
+    result = call(worktree_ctx, "write_patch", {"diff": big})
+    assert not result.ok and "patch too large: 81 changed lines" in result.text
+
+
 def test_write_patch_rejects_a_diff_that_does_not_apply(worktree_ctx):
     result = call(worktree_ctx, "write_patch", {"diff": PATCH.replace("USERS[user.id]", "NOPE[")})
     assert not result.ok and "does not apply" in result.text
+    assert worktree_ctx.state.artifacts["patch_rejections"][-1]["policy"] is False
     assert not (worktree_ctx.worktree / "shop" / "db.py").read_text().endswith("# saved\n")
 
 

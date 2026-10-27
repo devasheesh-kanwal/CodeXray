@@ -126,14 +126,18 @@ class CodeReviewer(Agent):
 class DebuggerInput(BaseModel):
     run_id: str
     issue: str
+    failing_tests: list[str] = Field(default_factory=list)
+    files: list[str] = Field(default_factory=list, description="Files the Architect picked")
     failure_notes: list[str] = Field(default_factory=list, description="From earlier failed attempts")
     context: str = ""
 
 
 class DebuggerOutput(BaseModel):
     root_cause: str
-    evidence: list[str] = Field(description="file:line references that show the cause")
-    files_to_change: list[str]
+    file: str = Field(description="The source file that holds the bug")
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
+    evidence: list[str] = Field(description="Short quotes from the code or the test output")
     fix_plan: str
 
 
@@ -147,7 +151,7 @@ class Debugger(Agent):
     max_output_tokens = 2500
 
     def summarize(self, output: DebuggerOutput) -> str:
-        return f"root cause: {output.root_cause[:150]}"
+        return f"root cause in {output.file}:{output.start_line}-{output.end_line}: {output.root_cause[:120]}"
 
 
 # ---------- Repair: write the patch ----------
@@ -157,8 +161,11 @@ class RepairInput(BaseModel):
     run_id: str
     issue: str
     root_cause: str
+    file: str
+    start_line: int
+    end_line: int
     fix_plan: str
-    files_to_change: list[str]
+    allowed_files: list[str] = Field(description="write_patch refuses any other file")
 
 
 class RepairOutput(BaseModel):
@@ -171,7 +178,7 @@ class Repair(Agent):
     lane = "heavy_code"
     input_schema = RepairInput
     output_schema = RepairOutput
-    allowed_tools = ("read_file", "read_test_output", "write_patch")
+    allowed_tools = ("read_file", "write_patch")
     max_steps = 6
     max_output_tokens = 4000
 
@@ -192,6 +199,7 @@ class ReviewerInput(BaseModel):
 
 class ReviewerOutput(BaseModel):
     verdict: Literal["approve", "request_changes"]
+    risk: Literal["low", "medium", "high"]
     notes: str
     concerns: list[str] = Field(default_factory=list)
 
@@ -206,7 +214,7 @@ class Reviewer(Agent):
     max_output_tokens = 2000
 
     def summarize(self, output: ReviewerOutput) -> str:
-        return f"verdict: {output.verdict}"
+        return f"verdict: {output.verdict}, risk: {output.risk}"
 
 
 # ---------- Summarizer: failure note ----------
@@ -216,12 +224,14 @@ class SummarizerInput(BaseModel):
     issue: str
     attempt: int
     root_cause: str
+    fix_plan: str = ""
     diff: str
+    failed_checks: list[str] = Field(default_factory=list, description="Eval gate checks that failed")
     test_output: str
 
 
 class SummarizerOutput(BaseModel):
-    failure_note: str = Field(description="2-4 sentences for the next attempt")
+    failure_note: str = Field(description="3-5 lines: hypothesis, patch idea, why it failed")
 
 
 class Summarizer(Agent):

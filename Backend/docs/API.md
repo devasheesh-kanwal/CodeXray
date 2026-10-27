@@ -64,6 +64,7 @@ In mock mode:
   - `/api/llm/status`
   - the repo endpoints: `GET/POST /api/repos`, `/status`, `/tree`, `/graph`, `/file`
   - Q&A: `/ask` and `/ask/stream`
+  - Repair: `POST /api/repos/{repo_id}/repair` and every `/api/repairs/...` endpoint
 
   Every other endpoint returns `501 NOT_IMPLEMENTED` until its feature is built.
 
@@ -87,7 +88,7 @@ Every error from every endpoint has the same shape:
 |---|---|---|
 | 404 | `NOT_FOUND` | Unknown route, repo, file, or repair run |
 | 405 | `METHOD_NOT_ALLOWED` | Wrong HTTP method for a route |
-| 409 | `INVALID_STATE` | Approve/reject a run that is not `AWAITING_APPROVAL`; ask about a repo that is not indexed (`ready`) yet |
+| 409 | `INVALID_STATE` | Approve/reject a run that is not `AWAITING_APPROVAL`; ask about (or repair) a repo that is not indexed (`ready`) yet; start a repair while another repair run for the same repo is still active; repair a repo that is not the root of a local git repository |
 | 422 | `VALIDATION_ERROR` | Bad body, query, or line range |
 | 500 | `INTERNAL_ERROR` | Unexpected server error (no internals are leaked) |
 | 501 | `NOT_IMPLEMENTED` | Feature not built yet and `MOCK_MODE=false` |
@@ -527,7 +528,21 @@ background.
 ```
 
 `issue`: 1–4000 chars. `test_command?` is optional; the default is the
-repo's test suite.
+repo's test suite (`python -m pytest -q`). It must run pytest (`pytest ...` or
+`python -m pytest ...`); anything else is `422 VALIDATION_ERROR`.
+
+Real mode (`MOCK_MODE=false`):
+
+- The repo must be indexed (`ready`) and be the root of a local git
+  repository, otherwise `409 INVALID_STATE`.
+- Only one repair run per repo at a time. Starting another while a run is
+  still active (including one in `AWAITING_APPROVAL`) is `409 INVALID_STATE`
+  with `details: {"repo_id", "run_id"}` (the active run).
+- Tests run in Docker (no network, CPU/memory limits) when Docker is
+  available; otherwise as a plain subprocess, and the run gets a `note`
+  event saying the sandbox is weaker.
+- The patch is written in a git worktree on branch `codexray/fix-<run_id>`.
+  The user's checked-out branch is never changed.
 
 ```json
 {"run_id": "run_8c1d2e3f"}
@@ -623,6 +638,10 @@ No body. Only allowed while the run is `AWAITING_APPROVAL`; otherwise
 - approve → `state: "MERGED"` (the patch is merged into a local branch; nothing is pushed)
 - reject → `state: "REJECTED"` (the repair branch is deleted)
 
+In real mode, approve commits the patch and creates the local branch
+`codexray/approved-<run_id>` (the last event's `data.branch`). The user's main
+branch is not changed, and nothing is pushed.
+
 ### GET /api/llm/status
 
 ```json
@@ -676,7 +695,7 @@ answers it, even before the other features are built.
 | `AWAITING_APPROVAL` | Waiting for a human to approve or reject |
 | `MERGED` | Approved and merged into a local branch (final) |
 | `REJECTED` | Rejected by the human (final) |
-| `FAILED` | Gave up after `max_attempts` (final) |
+| `FAILED` | Gave up after `max_attempts`, or could not start: the failure does not reproduce (no test fails at baseline), the tests could not run, the run's budget ran out, or an error (final). The last `note` or `error` event's `data.reason` says why |
 | `CLEANUP` | An attempt failed: failure note written, branch deleted; next is `DIAGNOSING` with `attempt + 1` |
 
 ---

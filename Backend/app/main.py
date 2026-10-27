@@ -15,6 +15,7 @@ from app.indexing.service import IndexService
 from app.llm import LLMRouter
 from app.mocks.repair_sim import MockRepairStore
 from app.qa.service import QaService
+from app.repair.service import RepairService
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -50,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.index_service = IndexService(settings, app.state.llm_router)
     app.state.index_service.mark_interrupted()
     app.state.qa_service = QaService(settings, app.state.index_service, app.state.llm_router)
+    app.state.repair_service = RepairService(settings, app.state.index_service, app.state.llm_router)
 
     app.add_middleware(
         CORSMiddleware,

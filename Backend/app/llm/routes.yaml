@@ -13,6 +13,8 @@ lanes:
     - {provider: groq, model: qwen/qwen3.8-27b, max_context: 131072}
     - {provider: openrouter, model: "poolside/laguna-s-2.1:free", max_context: 262144}
     - {provider: openrouter, model: "cohere/north-mini-code:free", max_context: 256000}
+    # Last resort when Groq hits its per-minute token limit (added 2026-10-27)
+    - {provider: gemini, model: gemini-3.5-flash-lite, max_context: 1048576}
 
   # Q&A over a lot of code
   long_context:
@@ -28,8 +30,10 @@ lanes:
     - {provider: openrouter, model: "nvidia/nemotron-3.5-lightning:free", max_context: 1000000}
 
   # Second opinions on patches. Called with exclude_models = the patch author.
-  # The first two never appear in heavy_code, so they are always independent.
+  # gemini-3.5-flash-lite is also heavy_code's last resort; when Repair used it,
+  # exclude_models skips it here and the next entry answers.
   reviewer:
     - {provider: gemini, model: gemini-3.6-flash, max_context: 1048576}
+    - {provider: gemini, model: gemini-3.5-flash-lite, max_context: 1048576}
     - {provider: openrouter, model: "nvidia/nemotron-3-ultra-550b-a55b:free", max_context: 1000000}
     - {provider: groq, model: openai/gpt-oss-120b, max_context: 131072}

@@ -105,22 +105,31 @@ def is_context_error(error: openai.APIStatusError) -> bool:
     return any(hint in text for hint in CONTEXT_ERROR_HINTS)
 
 
-def messages_for(provider: str, messages: list[Message]) -> list[Message]:
-    """Remove Gemini-only `extra_content` from tool calls for other providers.
+# Gemini's documented placeholder for tool calls it did not make itself.
+SKIP_SIGNATURE = {"google": {"thought_signature": "skip_thought_signature_validator"}}
 
-    Gemini 3 needs its thought_signature back; other providers may reject the
-    unknown field (e.g. after a fallback in the middle of a tool loop).
+
+def messages_for(provider: str, messages: list[Message]) -> list[Message]:
+    """Fit tool-call history to the provider (it changes after a mid-loop fallback).
+
+    Gemini 3 needs a thought_signature on every earlier tool call and answers
+    400 without one: calls made by other providers get a placeholder. Other
+    providers may reject Gemini's `extra_content` field, so it is removed.
     """
-    if provider == "gemini" or not any(m.get("tool_calls") for m in messages):
+    if not any(m.get("tool_calls") for m in messages):
         return messages
-    cleaned = []
+    fitted = []
     for message in messages:
         if message.get("tool_calls"):
-            calls = [{k: v for k, v in tc.items() if k != "extra_content"}
-                     for tc in message["tool_calls"]]
+            if provider == "gemini":
+                calls = [tc if tc.get("extra_content") else {**tc, "extra_content": SKIP_SIGNATURE}
+                         for tc in message["tool_calls"]]
+            else:
+                calls = [{k: v for k, v in tc.items() if k != "extra_content"}
+                         for tc in message["tool_calls"]]
             message = {**message, "tool_calls": calls}
-        cleaned.append(message)
-    return cleaned
+        fitted.append(message)
+    return fitted
 
 
 def short(error: Exception) -> str:

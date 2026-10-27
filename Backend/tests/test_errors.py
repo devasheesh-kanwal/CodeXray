@@ -10,6 +10,9 @@ from app.errors import ErrorResponse
 ENDPOINTS = [
     ("post", "/api/repos/r1/review", {"diff_text": "--- a/x\n+++ b/x\n"}),
     ("get", "/api/repos/r1/rules", None),
+]
+# Built in prompt 6: without mock mode these answer with real data (404 for unknown ids).
+REPAIR_ENDPOINTS = [
     ("post", "/api/repos/r1/repair", {"issue": "Delete returns 500"}),
     ("get", "/api/repairs/run_x", None),
     ("get", "/api/repairs/run_x/events", None),
@@ -72,6 +75,11 @@ def test_without_mock_mode_endpoints_are_501(real_client, method, url, body):
     resp = real_client.request(method, url, json=body)
     body = assert_error(resp, 501, "NOT_IMPLEMENTED")
     assert body.error.details["prompt"] in {"2", "3", "4", "5", "6"}
+
+
+@pytest.mark.parametrize(("method", "url", "body"), REPAIR_ENDPOINTS)
+def test_without_mock_mode_repair_endpoints_are_real(real_client, method, url, body):
+    assert_error(real_client.request(method, url, json=body), 404, "NOT_FOUND")
 
 
 def test_health_works_without_mock_mode(real_client):

@@ -258,3 +258,19 @@ def test_extra_content_only_goes_to_gemini(tmp_path):
     sent_to = {c.provider: c.body["messages"][1]["tool_calls"][0] for c in kit.fake.calls}
     assert sent_to["gemini"]["extra_content"] == {"google": {"thought_signature": "sig123"}}
     assert "extra_content" not in sent_to["groq"]
+
+
+def test_gemini_gets_a_placeholder_signature_for_other_providers_tool_calls(tmp_path):
+    groq_call = {k: v for k, v in SIGNED_CALL.items() if k != "extra_content"}
+    history = [*user("hi"), {"role": "assistant", "content": None, "tool_calls": [groq_call, SIGNED_CALL]},
+               {"role": "tool", "tool_call_id": "t1", "content": "result"}]
+    gemini = LaneEntry(provider="gemini", model="gem", max_context=8_000)
+    kit = make_router(tmp_path, entries=[ENTRIES[0], gemini], gemini_api_keys="AIzaG111")
+    kit.fake.on("small-a", error(429))  # forces the fallback to gemini mid-conversation
+    asyncio.run(kit.router.ask(LANE, history))
+
+    sent_to = {c.provider: c.body["messages"][1]["tool_calls"] for c in kit.fake.calls}
+    assert sent_to["gemini"][0]["extra_content"] == {"google": {"thought_signature": "skip_thought_signature_validator"}}
+    assert sent_to["gemini"][1]["extra_content"] == {"google": {"thought_signature": "sig123"}}  # real one kept
+    assert all("extra_content" not in tc for tc in sent_to["groq"])
+    assert "extra_content" not in history[1]["tool_calls"][0]  # the caller's history is not changed

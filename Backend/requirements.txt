@@ -15,5 +15,8 @@ rank-bm25==0.2.2
 chromadb==1.5.9
 pathspec==1.1.1
 
+# Repair (eval gate lint check)
+ruff==0.17.3
+
 # Tests
 pytest==9.1.1
