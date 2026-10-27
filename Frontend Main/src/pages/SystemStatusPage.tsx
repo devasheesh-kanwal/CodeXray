@@ -3,14 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api/client';
 import { Loading, ErrorBanner } from '../components/shared/States';
 import type { LLMStatus } from '../api/types';
-import { CheckCircle2, Clock, Ban, ArrowRightLeft, Cpu } from 'lucide-react';
-
 
 export default function SystemStatusPage() {
   const statusQ = useQuery({
     queryKey: ['llm-status'],
     queryFn: () => apiFetch<LLMStatus>('/api/llm/status'),
-    refetchInterval: 4000,
+    refetchInterval: 5000,
   });
 
   const [now, setNow] = useState(Date.now());
@@ -19,171 +17,108 @@ export default function SystemStatusPage() {
     return () => clearInterval(t);
   }, []);
 
-  if (statusQ.isLoading) return <Loading label="Loading provider telemetry…" />;
+  if (statusQ.isLoading) return <Loading />;
   if (statusQ.isError) return <ErrorBanner message={(statusQ.error as Error).message} onRetry={() => statusQ.refetch()} />;
 
   const data = statusQ.data!;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary tracking-tight">System & AI Providers Status</h1>
-          <p className="text-body-sm text-text-secondary">
-            Live telemetry, quota health, rate-limit cooldown tracking, and fallback failovers
-          </p>
-        </div>
+    <div className="font-sans">
+      <h1 className="font-display font-semibold text-3xl text-text mb-6 tracking-wide">
+        System status
+      </h1>
 
-        <div className="flex items-center gap-2 bg-surface border border-border px-4 py-2 rounded-xl shadow-xs">
-          <Cpu size={16} className="text-accent" />
-          <span className="text-caption text-text-secondary">Active Primary Model:</span>
-          <span className="text-body-sm font-bold text-text-primary">{data.activeModel}</span>
-        </div>
-      </div>
-
-      {/* Providers Grid */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Provider cards: OK = mint, Cooldown = amber, Disabled = red */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
         {data.providers.map((p) => {
           const cooldownMs = p.cooldownUntil ? new Date(p.cooldownUntil).getTime() - now : 0;
-          const isOk = p.status === 'ok';
-          const isCooldown = p.status === 'cooldown';
-
           return (
-            <div
-              key={p.name}
-              className={`bg-surface border rounded-2xl p-5 shadow-xs transition-all ${
-                isOk
-                  ? 'border-emerald-200/80 hover:border-emerald-300'
-                  : isCooldown
-                  ? 'border-amber-300 bg-amber-50/30'
-                  : 'border-border opacity-70'
-              }`}
-            >
+            <div key={p.name} className="bg-bg-surface border border-border rounded-[14px] p-6">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-body font-bold text-text-primary">{p.name}</span>
+                <span className="font-display font-semibold text-xl text-text tracking-wide capitalize">
+                  {p.name}
+                </span>
                 <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold uppercase tracking-wider ${
-                    isOk
-                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                      : isCooldown
-                      ? 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
-                      : 'bg-slate-100 text-slate-600 border border-slate-300'
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold uppercase tracking-wider ${
+                    p.status === 'ok'
+                      ? 'border border-text text-text'
+                      : p.status === 'cooldown'
+                      ? 'bg-warning/15 border border-warning text-warning'
+                      : 'border border-accent text-accent'
                   }`}
                 >
-                  {isOk ? <CheckCircle2 size={12} /> : isCooldown ? <Clock size={12} /> : <Ban size={12} />}
                   {p.status}
                 </span>
               </div>
-
-              <div className="text-caption font-mono text-text-secondary mb-2">
-                Model: <span className="text-text-primary font-semibold">{p.model || '—'}</span>
-              </div>
-
-              {isCooldown && cooldownMs > 0 ? (
-                <div className="mt-3 pt-2.5 border-t border-amber-200/70 flex items-center justify-between text-caption text-amber-800 font-medium">
-                  <span>Cooldown reset in:</span>
-                  <span className="font-mono font-bold bg-amber-100 px-2 py-0.5 rounded">
-                    {Math.max(0, Math.ceil(cooldownMs / 1000))}s
-                  </span>
-                </div>
-              ) : isOk ? (
-                <div className="mt-3 pt-2.5 border-t border-emerald-100 text-[11px] text-emerald-700 font-medium">
-                  ✓ Healthy · Low latency response
-                </div>
-              ) : (
-                <div className="mt-3 pt-2.5 border-t border-border text-[11px] text-text-muted">
-                  Provider disabled in configuration
-                </div>
+              <p className="text-xs font-mono text-text-muted">{p.model}</p>
+              {p.status === 'cooldown' && cooldownMs > 0 && (
+                <p className="text-xs font-mono text-warning mt-2">
+                  cooldown {Math.ceil(cooldownMs / 1000)}s
+                </p>
               )}
             </div>
           );
         })}
       </div>
 
-      {/* Recent Calls Table */}
-      <div className="bg-surface border border-border rounded-2xl p-6 shadow-xs">
-        <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
-          <div>
-            <h3 className="text-body font-bold text-text-primary">Recent Provider Calls & Fallbacks</h3>
-            <p className="text-caption text-text-secondary">
-              Highlights automatic fallbacks when preferred models hit rate limits or cooldowns
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 text-caption text-text-muted">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> Model fallback switch
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Normal execution
-            </span>
-          </div>
-        </div>
-
+      {/* Recent calls table */}
+      <div className="bg-bg-surface border border-border rounded-[14px] p-6 overflow-hidden">
+        <h2 className="font-display font-semibold text-xl text-text mb-4 tracking-wide">
+          Recent calls
+        </h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-body-sm text-left">
+          <table className="w-full text-xs font-mono">
             <thead>
-              <tr className="text-caption font-bold uppercase tracking-wider text-text-muted border-b border-border">
-                <th className="py-3 px-3">Provider</th>
-                <th className="py-3 px-3">Model</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3">Latency</th>
-                <th className="py-3 px-3">Cached</th>
-                <th className="py-3 px-3 text-right">Timestamp</th>
+              <tr className="text-left text-text-muted border-b border-border font-sans uppercase tracking-wider text-[11px]">
+                <th className="py-2.5 px-3">Provider</th>
+                <th className="py-2.5 px-3">Model</th>
+                <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3">Latency</th>
+                <th className="py-2.5 px-3">Cached</th>
+                <th className="py-2.5 px-3">Time</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/60">
+            <tbody>
               {data.recentCalls.map((c) => {
-                const isSwitched = c.switched || c.status === 'cooldown';
-
+                const switched = c.status !== 'ok';
                 return (
                   <tr
                     key={c.id}
-                    className={`transition-colors ${
-                      isSwitched
-                        ? 'bg-amber-50/70 hover:bg-amber-100/50 font-medium'
-                        : 'hover:bg-surface-muted/60'
+                    className={`border-b border-border/50 transition-colors ${
+                      switched ? 'bg-warning/10 text-warning' : 'hover:bg-bg-raised text-text'
                     }`}
                   >
-                    <td className="py-3 px-3 font-semibold text-text-primary flex items-center gap-2">
-                      {isSwitched && (
-                        <span title="Automatic failover switch">
-                          <ArrowRightLeft size={13} className="text-amber-600" />
-                        </span>
-                      )}
-                      <span>{c.provider}</span>
-                    </td>
-                    <td className="py-3 px-3 font-mono text-caption text-text-secondary">{c.model}</td>
-                    <td className="py-3 px-3">
+                    <td className="py-2.5 px-3 font-medium capitalize">{c.provider}</td>
+                    <td className="py-2.5 px-3 text-text-muted">{c.model}</td>
+                    <td className="py-2.5 px-3">
                       <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption font-semibold ${
+                        className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-semibold ${
                           c.status === 'ok'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
+                            ? 'border border-text/40 text-text'
+                            : 'bg-warning/20 border border-warning text-warning'
                         }`}
                       >
                         {c.status}
                       </span>
                     </td>
-                    <td className="py-3 px-3 font-mono text-caption text-text-secondary">{c.latencyMs}ms</td>
-                    <td className="py-3 px-3 text-caption font-medium">
-                      {c.cached ? (
-                        <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                          cached
-                        </span>
-                      ) : (
-                        <span className="text-text-muted">live</span>
-                      )}
+                    <td className="py-2.5 px-3 text-text-muted">{c.latencyMs}ms</td>
+                    <td className="py-2.5 px-3">
+                      <span className={c.cached ? 'text-text font-medium' : 'text-text-faint'}>
+                        {c.cached ? 'yes' : 'no'}
+                      </span>
                     </td>
-                    <td className="py-3 px-3 text-caption font-mono text-text-muted text-right">{c.timestamp}</td>
+                    <td className="py-2.5 px-3 text-text-faint">{c.timestamp}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs font-mono text-text-faint">
+          <span>Active model: {data.activeModel}</span>
+          <span>Poll interval: 5s</span>
+        </div>
       </div>
     </div>
   );
 }
-

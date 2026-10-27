@@ -3,7 +3,7 @@ import type { Repo, IndexStatus, FileNode, GraphData, AskResponse, PRReview, Rul
 export const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const mockRepos: Repo[] = [
-  { id: 'r1', name: 'codesense-backend', url: 'https://github.com/example/codesense-backend.git', status: 'ready', filesDone: 42, totalFiles: 42, createdAt: '2026-10-20T10:00:00Z' },
+  { id: 'r1', name: 'codexray-backend', url: 'https://github.com/example/codexray-backend.git', status: 'ready', filesDone: 42, totalFiles: 42, createdAt: '2026-10-20T10:00:00Z' },
   { id: 'r2', name: 'my-frontend', localPath: '/Users/dev/my-frontend', status: 'embedding', filesDone: 18, totalFiles: 36, createdAt: '2026-10-21T12:00:00Z' },
 ];
 

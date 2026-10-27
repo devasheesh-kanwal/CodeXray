@@ -23,8 +23,7 @@ export default function Sidebar() {
             to={it.to}
             end={it.to === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-body-sm transition-colors ${
-                isActive ? 'bg-accent-soft text-accent font-semibold' : 'text-text-secondary hover:bg-surface-muted'
+              `flex items-center gap-3 px-3 py-2 rounded-lg text-body-sm transition-colors ${isActive ? 'bg-accent-soft text-accent font-semibold' : 'text-text-secondary hover:bg-surface-muted'
               }`
             }
           >

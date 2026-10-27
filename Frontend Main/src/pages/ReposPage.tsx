@@ -2,15 +2,14 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../api/client';
 import { useRepo } from '../context/RepoContext';
-import { Loading, EmptyState, ErrorBanner } from '../components/shared/States';
+import { Loading, ErrorBanner } from '../components/shared/States';
 import type { Repo, IndexStatus } from '../api/types';
-import { Check, FolderGit2, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowRight, Check, FolderGit2 } from 'lucide-react';
 
 const STAGES = ['cloning', 'parsing', 'graph', 'embedding', 'summaries', 'ready'] as const;
 
 export default function ReposPage() {
   const qc = useQueryClient();
-  const { selectedRepoId, setSelectedRepoId, setSelectedRepo } = useRepo();
   const reposQ = useQuery({ queryKey: ['repos'], queryFn: () => apiFetch<Repo[]>('/api/repos') });
   const [tab, setTab] = useState<'git' | 'local'>('git');
   const [gitUrl, setGitUrl] = useState('');
@@ -19,234 +18,256 @@ export default function ReposPage() {
 
   const addMut = useMutation({
     mutationFn: (body: any) => apiFetch<Repo>('/api/repos', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: (newRepo) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['repos'] });
       setError(null);
       setGitUrl('');
       setLocalPath('');
-      setSelectedRepoId(newRepo.id);
-      setSelectedRepo(newRepo);
     },
     onError: (e: any) => setError(e.message || 'Failed to add repo'),
   });
 
   function submit() {
     if (tab === 'git') {
-      if (!gitUrl.trim()) { setError('Git URL required'); return; }
+      if (!gitUrl.trim()) {
+        setError('Git URL required');
+        return;
+      }
       addMut.mutate({ url: gitUrl.trim() });
     } else {
-      if (!localPath.trim()) { setError('Local path required'); return; }
+      if (!localPath.trim()) {
+        setError('Local path required');
+        return;
+      }
       addMut.mutate({ localPath: localPath.trim() });
     }
   }
 
-  function handleSelect(r: Repo) {
-    setSelectedRepoId(r.id);
-    setSelectedRepo(r);
-  }
-
-  if (reposQ.isLoading) return <Loading label="Loading repositories…" />;
+  if (reposQ.isLoading) return <Loading />;
   if (reposQ.isError) return <ErrorBanner message={(reposQ.error as Error).message} onRetry={() => reposQ.refetch()} />;
 
-  const repos = reposQ.data || [];
-
   return (
-    <div className="max-w-5xl mx-auto pb-12">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-text-primary tracking-tight">Repositories</h1>
-          <p className="text-body-sm text-text-secondary mt-1">Manage, index, and monitor repository codebases</p>
-        </div>
+    <div className="font-sans">
+      {/* Title */}
+      <div className="mb-10">
+        <h1 className="flex flex-wrap items-baseline gap-x-3.5">
+          <span className="font-display font-bold text-[56px] md:text-[64px] text-accent leading-none">
+            INDEX
+          </span>
+          <span className="font-display font-normal text-[48px] md:text-[56px] text-text leading-none">
+            your repositories
+          </span>
+        </h1>
+        <div className="w-16 h-px bg-border my-4" />
+        <p className="text-text-muted text-sm font-sans tracking-wide">
+          Add a repo and CodeXray maps it for you
+        </p>
       </div>
 
-      {/* Add Repository Box */}
-      <div className="bg-surface border border-border rounded-2xl p-6 mb-8 shadow-xs">
-        <div className="flex gap-2 mb-4">
+      {/* Add Repository Card */}
+      <div className="bg-bg-surface border border-border rounded-[14px] p-[28px] mb-8">
+        {/* Segmented Control */}
+        <div className="bg-bg-raised p-1 rounded-full inline-flex border border-border mb-5">
           <button
-            onClick={() => setTab('git')}
-            className={`px-4 py-1.5 rounded-full text-caption font-semibold transition-colors ${
-              tab === 'git' ? 'bg-accent text-white shadow-xs' : 'bg-surface-muted text-text-secondary hover:bg-slate-200/60'
+            type="button"
+            onClick={() => { setTab('git'); setError(null); }}
+            className={`px-5 py-1.5 rounded-full text-[13px] font-sans font-medium transition-colors cursor-pointer ${
+              tab === 'git' ? 'bg-accent text-white' : 'text-text-muted hover:text-text'
             }`}
           >
             Git URL
           </button>
           <button
-            onClick={() => setTab('local')}
-            className={`px-4 py-1.5 rounded-full text-caption font-semibold transition-colors ${
-              tab === 'local' ? 'bg-accent text-white shadow-xs' : 'bg-surface-muted text-text-secondary hover:bg-slate-200/60'
+            type="button"
+            onClick={() => { setTab('local'); setError(null); }}
+            className={`px-5 py-1.5 rounded-full text-[13px] font-sans font-medium transition-colors cursor-pointer ${
+              tab === 'local' ? 'bg-accent text-white' : 'text-text-muted hover:text-text'
             }`}
           >
             Local path
           </button>
         </div>
 
-        <div className="mb-4">
-          {tab === 'git' ? (
-            <input
-              value={gitUrl}
-              onChange={(e) => setGitUrl(e.target.value)}
-              placeholder="https://github.com/..."
-              className="w-full h-11 px-4 rounded-xl border border-border bg-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
-              onKeyDown={(e) => e.key === 'Enter' && submit()}
-            />
-          ) : (
-            <input
-              value={localPath}
-              onChange={(e) => setLocalPath(e.target.value)}
-              placeholder="/Users/dev/my-project"
-              className="w-full h-11 px-4 rounded-xl border border-border bg-surface text-body-sm focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
-              onKeyDown={(e) => e.key === 'Enter' && submit()}
-            />
-          )}
-        </div>
+        {/* Input */}
+        {tab === 'git' ? (
+          <input
+            value={gitUrl}
+            onChange={(e) => setGitUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+            placeholder="https://github.com/..."
+            className="w-full h-11 px-4 rounded-[10px] border border-border bg-bg-raised text-text placeholder:text-text-faint text-sm font-sans focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-all mb-4"
+          />
+        ) : (
+          <input
+            value={localPath}
+            onChange={(e) => setLocalPath(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+            placeholder="/path/to/repo"
+            className="w-full h-11 px-4 rounded-[10px] border border-border bg-bg-raised text-text placeholder:text-text-faint text-sm font-sans focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-all mb-4"
+          />
+        )}
 
-        {error && <ErrorBanner message={error} />}
+        {/* Inline validation error */}
+        {error && (
+          <p className="text-accent text-xs font-sans mb-3">{error}</p>
+        )}
 
+        {/* Submit button */}
         <button
+          type="button"
           onClick={submit}
           disabled={addMut.isPending}
-          className="px-5 py-2.5 rounded-xl bg-accent text-white text-body-sm font-semibold hover:bg-accent-hover active:bg-accent-active disabled:opacity-50 transition-all shadow-xs"
+          className="px-6 py-2.5 rounded-full bg-accent hover:bg-accent-hover text-white text-[13px] font-sans font-semibold tracking-wider uppercase inline-flex items-center gap-2 group transition-all disabled:opacity-40 cursor-pointer"
         >
-          {addMut.isPending ? 'Adding repository…' : 'Add repository'}
+          <span>{addMut.isPending ? 'Adding…' : 'Add repository'}</span>
+          <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
 
-      {repos.length === 0 && (
-        <EmptyState title="No repositories indexed" description="Add a repository above by entering its Git URL or local directory path." />
+      {/* Empty State */}
+      {reposQ.data && reposQ.data.length === 0 && (
+        <div className="bg-bg-surface border border-border rounded-[14px] p-12 text-center my-6">
+          <FolderGit2 size={42} className="text-text-muted mb-4 mx-auto" />
+          <h3 className="font-display font-medium text-xl text-text mb-2">No repositories indexed</h3>
+          <p className="text-text-muted text-sm font-sans mb-6 max-w-sm mx-auto">
+            Add a repo and CodeXray maps it for you.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.querySelector('input');
+              el?.focus();
+            }}
+            className="px-6 py-2.5 rounded-full bg-accent hover:bg-accent-hover text-white text-[13px] font-sans font-semibold tracking-wider uppercase inline-flex items-center gap-2 transition-colors cursor-pointer"
+          >
+            <span>Add Repository</span>
+            <ArrowRight size={14} />
+          </button>
+        </div>
       )}
 
-      {/* Repositories List */}
+      {/* Repos List */}
       <div className="space-y-4">
-        {repos.map((r) => (
-          <RepoCard
-            key={r.id}
-            repo={r}
-            isSelected={r.id === selectedRepoId}
-            onSelect={() => handleSelect(r)}
-          />
+        {reposQ.data?.map((r) => (
+          <RepoCard key={r.id} repo={r} />
         ))}
       </div>
     </div>
   );
 }
 
-function RepoCard({
-  repo,
-  isSelected,
-  onSelect,
-}: {
-  repo: Repo;
-  isSelected: boolean;
-  onSelect: () => void;
-}) {
+function RepoCard({ repo }: { repo: Repo }) {
+  const { selectedRepoId, setSelectedRepoId, setSelectedRepo } = useRepo();
+  const isSelected = selectedRepoId === repo.id;
+
   const statusQ = useQuery({
     queryKey: ['repo-status', repo.id],
     queryFn: () => apiFetch<IndexStatus>(`/api/repos/${repo.id}/status`),
-    refetchInterval: repo.status !== 'ready' && repo.status !== 'error' ? 1200 : false,
+    refetchInterval: repo.status !== 'ready' && repo.status !== 'error' ? 1000 : false,
   });
 
   const stage = statusQ.data?.stage || repo.status;
   const idx = STAGES.indexOf(stage as any);
-  const filesDone = statusQ.data?.filesDone ?? repo.filesDone ?? (stage === 'ready' ? 42 : 18);
-  const totalFiles = statusQ.data?.totalFiles ?? repo.totalFiles ?? 42;
-  const percent = Math.min(100, Math.round((filesDone / totalFiles) * 100));
+  const isIndexing = stage !== 'ready' && stage !== 'error';
+
+  // Files progress calculation for indexing state
+  const rawProgress = statusQ.data?.progress ?? (idx >= 0 ? Math.round(((idx + 1) / STAGES.length) * 100) : 40);
+  const filesTotal = (statusQ.data as any)?.files_total ?? (statusQ.data as any)?.totalFiles ?? repo.totalFiles ?? 48;
+  const filesDone = (statusQ.data as any)?.files_done ?? (statusQ.data as any)?.filesDone ?? repo.filesDone ?? Math.min(filesTotal, Math.round((rawProgress / 100) * filesTotal));
 
   return (
     <div
-      onClick={onSelect}
-      className={`bg-surface border rounded-2xl p-6 transition-all cursor-pointer relative shadow-xs hover:border-accent/40 ${
-        isSelected ? 'ring-2 ring-accent border-accent shadow-md bg-accent-soft/10' : 'border-border'
+      onClick={() => {
+        setSelectedRepoId(repo.id);
+        setSelectedRepo(repo);
+      }}
+      className={`bg-bg-surface border rounded-[14px] p-[28px] transition-all cursor-pointer relative ${
+        isSelected
+          ? 'border-accent shadow-[0_0_24px_rgba(220,31,31,0.12)]'
+          : 'border-border hover:border-border-strong hover:shadow-[0_0_24px_rgba(220,31,31,0.08)]'
       }`}
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isSelected ? 'bg-accent text-white' : 'bg-surface-muted text-text-secondary'}`}>
-            <FolderGit2 size={20} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-h4 text-text-primary">{repo.name}</span>
-              {isSelected && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-caption font-semibold bg-accent-soft text-accent border border-accent/20">
-                  <Check size={12} /> Active Repo
-                </span>
-              )}
-            </div>
-            <div className="text-caption text-text-muted mt-0.5">Click to select for explorer, ask, reviews & repair</div>
-          </div>
+      {/* Card Header */}
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 className="font-display font-semibold text-[24px] text-text tracking-wide mb-1">
+            {repo.name}
+          </h2>
+          <span className="font-mono text-xs text-text-faint">
+            {repo.url || repo.localPath}
+          </span>
         </div>
-        <span className="text-caption font-mono text-text-muted bg-surface-muted px-2.5 py-1 rounded-md max-w-sm truncate">
-          {repo.url || repo.localPath}
-        </span>
-      </div>
 
-      {/* Stepper Progress */}
-      <div className="my-5 overflow-x-auto pb-2">
-        <div className="flex items-center gap-2 min-w-[580px]">
-          {STAGES.map((s, i) => {
-            const isDone = stage === 'ready' || idx > i;
-            const isActive = idx === i && stage !== 'ready';
-            return (
-              <div key={s} className="flex items-center gap-2 flex-1 last:flex-none">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-caption font-semibold transition-colors ${
-                      isDone
-                        ? 'bg-emerald-500 text-white shadow-xs'
-                        : isActive
-                        ? 'bg-accent text-white shadow-xs animate-pulse ring-4 ring-accent/20'
-                        : 'bg-surface-muted text-text-muted border border-border'
-                    }`}
-                  >
-                    {isDone ? <Check size={14} /> : i + 1}
-                  </div>
-                  <span
-                    className={`text-caption font-medium capitalize ${
-                      isDone ? 'text-text-primary' : isActive ? 'text-accent font-semibold' : 'text-text-muted'
-                    }`}
-                  >
-                    {s}
-                  </span>
-                </div>
-                {i < STAGES.length - 1 && (
-                  <div className={`flex-1 h-0.5 min-w-[20px] transition-colors ${isDone ? 'bg-emerald-500' : 'bg-border'}`} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Progress & Status Details */}
-      <div className="flex items-center justify-between text-body-sm pt-2 border-t border-border/60">
-        <div className="flex items-center gap-2">
+        {/* Status badge at top right: READY (mint outline), INDEXING (red outline) */}
+        <div>
           {stage === 'ready' ? (
-            <span className="inline-flex items-center gap-1.5 text-caption font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-              <CheckCircle2 size={13} /> ready
+            <span className="border border-text text-text text-[11px] tracking-widest font-sans font-semibold px-2.5 py-0.5 rounded-full uppercase">
+              READY
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 text-caption font-semibold text-accent bg-accent-soft border border-accent/20 px-2.5 py-0.5 rounded-full">
-              <Loader2 size={13} className="animate-spin" /> {stage}
+            <span className="border border-accent text-accent text-[11px] tracking-widest font-sans font-semibold px-2.5 py-0.5 rounded-full uppercase animate-pulse">
+              INDEXING
             </span>
           )}
-          <span className="text-caption text-text-secondary">
-            {statusQ.data?.message || (stage === 'ready' ? 'Indexed and ready for queries' : `Currently processing ${stage}...`)}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="w-24 bg-surface-muted h-2 rounded-full overflow-hidden border border-border">
-            <div
-              className={`h-full transition-all duration-500 ${stage === 'ready' ? 'bg-emerald-500' : 'bg-accent'}`}
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <span className="text-caption font-medium text-text-secondary">
-            {filesDone} / {totalFiles} files ({percent}%)
-          </span>
         </div>
       </div>
+
+      {/* Stepper */}
+      <div className="flex items-center overflow-x-auto py-2">
+        {STAGES.map((s, i) => {
+          const done = idx > i || stage === 'ready';
+          const active = idx === i && stage !== 'ready';
+
+          return (
+            <div key={s} className="flex items-center shrink-0">
+              <div className="flex flex-col items-center">
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-all ${
+                    done
+                      ? 'border border-text text-text bg-transparent'
+                      : active
+                      ? 'bg-accent text-white animate-pulse shadow-[0_0_10px_rgba(220,31,31,0.5)]'
+                      : 'border border-border text-text-faint bg-transparent'
+                  }`}
+                >
+                  {done ? <Check size={14} strokeWidth={2.5} /> : i + 1}
+                </div>
+                <span
+                  className={`text-[11px] font-sans tracking-wider uppercase font-medium mt-1.5 ${
+                    active ? 'text-text' : done ? 'text-text-muted' : 'text-text-faint'
+                  }`}
+                >
+                  {s}
+                </span>
+              </div>
+
+              {i < STAGES.length - 1 && (
+                <div
+                  className={`w-6 md:w-12 h-[2px] mx-1.5 -mt-5 transition-colors ${
+                    idx > i || stage === 'ready' ? 'bg-text/60' : 'bg-border'
+                  }`}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Indexing card progress: files_done / files_total with thin red progress bar */}
+      {isIndexing && (
+        <div className="mt-5 pt-4 border-t border-border flex flex-col gap-1.5">
+          <div className="flex justify-between items-center text-xs font-mono text-text-muted">
+            <span>indexing repository...</span>
+            <span>{filesDone} / {filesTotal} files</span>
+          </div>
+          <div className="w-full h-1 bg-bg-raised rounded-full overflow-hidden">
+            <div
+              className="h-full bg-accent transition-all duration-300"
+              style={{ width: `${Math.min(100, Math.round((filesDone / filesTotal) * 100))}%` }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
