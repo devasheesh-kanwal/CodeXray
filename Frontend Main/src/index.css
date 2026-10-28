@@ -433,6 +433,217 @@ section:focus { outline: none; }
 }
 @keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 
+/* ═══════════════════════════════════════════════════════════════
+   CODER (CLI-style composer: folder chip, rounded box, picker row, strip)
+   ═══════════════════════════════════════════════════════════════ */
+.app-shell .coder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  color: #B7C6C0;
+  font: 400 15px/1 Inter, sans-serif;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.app-shell .coder-chip:hover { background: rgba(255,255,255,.06) !important; color: var(--text); }
+.app-shell .coder-caret { color: var(--text-muted); transition: transform 0.18s ease; }
+.app-shell [aria-expanded="true"] > .coder-caret { transform: rotate(180deg); }
+
+/* Outer panel = the box plus the strip under it */
+.app-shell .coder-composer-wrap {
+  border-radius: 18px;
+  background: rgba(38,38,42,.92);
+  border: 1px solid rgba(255,255,255,.07);
+  box-shadow: 0 18px 50px rgba(0,0,0,.45);
+}
+.app-shell .coder-composer {
+  border-radius: 16px;
+  background: rgba(24,24,27,.96);
+  border: 1px solid rgba(255,255,255,.09);
+  margin: -1px -1px 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.app-shell .coder-composer:focus-within {
+  border-color: rgba(255,255,255,.18);
+  box-shadow: 0 0 0 3px rgba(217,160,102,.08);
+}
+.app-shell .coder-composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  max-height: 220px;
+  padding: 16px 18px 6px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  font: 400 15.5px/1.5 Inter, sans-serif;
+}
+.app-shell .coder-composer textarea::placeholder { color: rgba(207,220,215,.55); }
+.app-shell .coder-composer textarea:focus-visible { outline: none; }
+.app-shell .coder-composer textarea:disabled { cursor: not-allowed; }
+
+.app-shell .coder-options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 14px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.07);
+  font: 400 12px/1 Inter, sans-serif;
+  color: var(--text-muted);
+}
+.app-shell .coder-options input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: 400 12.5px/1.4 "JetBrains Mono", monospace;
+}
+
+.app-shell .coder-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 10px;
+}
+.app-shell .coder-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 9px;
+  color: #B7C6C0;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.app-shell .coder-icon-btn:hover,
+.app-shell .coder-icon-btn[aria-pressed="true"] { background: rgba(255,255,255,.07) !important; color: var(--text); }
+.app-shell .coder-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 9px;
+  color: var(--text);
+  font: 400 14px/1 Inter, sans-serif;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.app-shell .coder-picker:hover,
+.app-shell .coder-picker[aria-expanded="true"] { background: rgba(255,255,255,.07) !important; }
+.app-shell .coder-picker-sub { color: var(--text-muted); font-size: 13px; }
+
+.app-shell .coder-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.10);
+  background-color: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.18s ease, opacity 0.18s ease, transform 0.12s ease;
+}
+.app-shell .coder-send:disabled {
+  background-color: rgba(255,255,255,.08);
+  color: rgba(207,220,215,.45);
+  cursor: default;
+  box-shadow: none !important;
+}
+.app-shell .coder-send.is-stop { background-color: rgba(220,31,31,.18); color: #FF8A8A; border-color: rgba(220,31,31,.45); }
+
+.app-shell .coder-foot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px 10px;
+  font: 400 12.5px/1.35 Inter, sans-serif;
+  color: rgba(183,198,192,.75);
+}
+.app-shell .coder-foot span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Menus for the repo chip and the mode picker */
+.app-shell .coder-menu {
+  position: absolute;
+  z-index: 40;
+  min-width: 260px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(22,22,26,.98);
+  box-shadow: 0 24px 60px rgba(0,0,0,.55);
+  animation: dropdownIn 0.14s ease-out both;
+}
+.app-shell .coder-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  font: 400 13.5px/1.3 Inter, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+.app-shell .coder-menu-item:hover { background: rgba(255,255,255,.06) !important; }
+.app-shell .coder-menu-item[aria-selected="true"] { background: rgba(220,31,31,.10) !important; }
+.app-shell .coder-menu-meta { color: var(--text-faint); font: 400 11.5px/1 "JetBrains Mono", monospace; }
+.app-shell .coder-menu-hint { display: block; margin-top: 3px; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+.app-shell .coder-menu-empty { padding: 10px; font-size: 13px; color: var(--text-muted); }
+.app-shell .coder-menu-empty a { color: var(--accent); text-decoration: underline; }
+
+.app-shell .coder-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+.app-shell .coder-suggestions button {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.08);
+  color: var(--text-muted);
+  font: 400 12.5px/1 Inter, sans-serif;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.app-shell .coder-suggestions button:hover { color: var(--text); border-color: rgba(255,255,255,.18); }
+
+.app-shell .coder-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 400 12.5px/1 Inter, sans-serif;
+  color: var(--sun-amber);
+}
+.app-shell .coder-agent .pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sun-amber);
+  box-shadow: 0 0 8px var(--sun-amber);
+}
+
 /* React Flow controls in the dark theme */
 .app-shell .react-flow__controls { box-shadow: none; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,.12); }
 .app-shell .react-flow__controls-button {
