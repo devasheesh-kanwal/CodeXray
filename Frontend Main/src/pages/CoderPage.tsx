@@ -8,14 +8,18 @@ import { CodeViewer } from '../components/shared/CodeViewer';
 import RepairCard from '../components/coder/RepairCard';
 import ReactMarkdown from 'react-markdown';
 import { detectMode, improveQuestion, resolveFiles, type Mode } from '../components/coder/intent';
+import CoderModelPicker from '../components/coder/CoderModelPicker';
+import { findModel, shortName, useModels, useSelectModel } from '../api/models';
 import type { AskFinal, FileSlice, Repo, RepairRequest, RepairStartResponse, TreeNode, TreeResponse } from '../api/types';
-import { Square, Sparkles, FileCode, MessageSquare, Wrench, Lightbulb, RotateCcw, Folder, ChevronDown, Check, Plus, ArrowRight, X } from 'lucide-react';
+import { Square, Sparkles, FileCode, MessageSquare, Wrench, Lightbulb, RotateCcw, Folder, ChevronDown, Check, Plus, ArrowRight, X, TerminalSquare } from 'lucide-react';
 
 type Msg =
   // sentAs: what was actually sent, when it differs from what was typed; notes: file names that were corrected.
   | { role: 'user'; content: string; mode: Mode; sentAs?: string; notes?: string[] }
   | { role: 'assistant'; kind: 'answer'; content: string; meta?: AskFinal; error?: unknown }
-  | { role: 'assistant'; kind: 'repair'; runId?: string; error?: unknown; activeRunId?: string };
+  | { role: 'assistant'; kind: 'repair'; runId?: string; error?: unknown; activeRunId?: string }
+  // The reply to a /command, e.g. /model.
+  | { role: 'assistant'; kind: 'note'; text: string; items?: string[] };
 
 // Marker regex from docs/API.md. Parse it on the full text, not on single tokens.
 const CITATION_RE = /\[([^[\]:]+):(\d+)-(\d+)\]/g;
@@ -94,6 +98,8 @@ export default function CoderPage() {
     queryKey: ['repos'],
     queryFn: () => apiFetch<Repo[]>('/api/repos'),
   });
+  const modelsQ = useModels();
+  const selectModel = useSelectModel();
 
   // Switching repos or leaving the page stops a running answer (and its LLM calls).
   // Repair runs keep going on the server; their cards pick them up again.
@@ -126,6 +132,7 @@ export default function CoderPage() {
   }, [input]);
 
   const mode: Mode = modeOverride ?? detectMode(input);
+  const isCommand = input.trimStart().startsWith('/');
   const ModeIcon = MODE_INFO[mode].icon;
   const streaming = busy === 'ask' || busy === 'improve';
 
@@ -158,6 +165,11 @@ export default function CoderPage() {
   function send(text?: string, forced?: Mode) {
     const content = (text ?? input).trim();
     if (!content || busy || !selectedRepoId) return;
+    if (content.startsWith('/')) {
+      setInput('');
+      runCommand(selectedRepoId, content);
+      return;
+    }
     const sendMode = forced ?? (text === undefined ? mode : detectMode(content));
     setInput('');
     setModeOverride(null);
@@ -228,6 +240,53 @@ export default function CoderPage() {
       updateChat(repo, (m) => [...m, { role: 'assistant', kind: 'repair', error: e, activeRunId }]);
     } finally {
       setBusy(null);
+    }
+  }
+
+  /** /model (list), /model auto, /model <name>: switch the model every agent tries first. */
+  async function runCommand(repo: string, command: string) {
+    const note = (text: string, items?: string[]) =>
+      updateChat(repo, (m) => [...m, { role: 'assistant', kind: 'note', text, items }]);
+    updateChat(repo, (m) => [...m, { role: 'user', content: command, mode: 'ask' }]);
+    const [name, ...rest] = command.slice(1).split(/\s+/);
+    const arg = rest.join(' ').trim();
+    if (name.toLowerCase() !== 'model') {
+      note(`Unknown command /${name}. Try /model to see or switch the AI model.`);
+      return;
+    }
+    const data = modelsQ.data ?? (await modelsQ.refetch()).data;
+    if (!data) {
+      note('Could not load the model list from the backend.');
+      return;
+    }
+    if (!arg) {
+      note(
+        data.selected
+          ? `Using ${data.selected} first (falls back if it fails). Switch with /model <name>, or /model auto.`
+          : 'Automatic: each task uses its best model. Pick one with /model <name>:',
+        data.models.map((m) => `${m.id}${m.state === 'available' ? '' : ` (${m.state.replace('_', ' ')})`}`),
+      );
+      return;
+    }
+    if (arg.toLowerCase() === 'auto') {
+      await selectModel.mutateAsync(null);
+      note('Model: automatic. Each task uses its best model and switches only when one fails.');
+      return;
+    }
+    const { match, candidates } = findModel(data.models, arg);
+    if (!match) {
+      note(
+        candidates.length ? `"${arg}" matches several models. Be more specific:` : `No model matches "${arg}". Available:`,
+        (candidates.length ? candidates : data.models).map((m) => m.id),
+      );
+      return;
+    }
+    try {
+      await selectModel.mutateAsync(match.id);
+      note(`Model: ${match.id}. Every agent tries it first; if it fails, the next working model answers.`
+        + (match.state === 'available' ? '' : ` Right now it is ${match.state.replace('_', ' ')}, so others will answer until it is back.`));
+    } catch {
+      note(`Could not switch to ${match.id}.`);
     }
   }
 
@@ -450,7 +509,7 @@ export default function CoderPage() {
               send();
             }
           }}
-          placeholder={selectedRepoId ? 'Ask anything, or describe a bug to fix…' : 'Choose a repository above to start'}
+          placeholder={selectedRepoId ? 'Ask anything, describe a bug to fix, or /model to switch AI model…' : 'Choose a repository above to start'}
           disabled={!selectedRepoId || !!busy}
           maxLength={4000}
           aria-label="Message"
@@ -526,6 +585,8 @@ export default function CoderPage() {
 
           <div style={{ flex: 1 }} />
 
+          <CoderModelPicker busy={!!busy} />
+
           {streaming ? (
             <button type="button" className="coder-send is-stop" onClick={stop} title="Stop" aria-label="Stop">
               <Square size={13} />
@@ -536,8 +597,8 @@ export default function CoderPage() {
               className="coder-send"
               onClick={() => send()}
               disabled={!canSend}
-              title={mode === 'fix' ? 'Fix it' : mode === 'improve' ? 'Suggest' : 'Send'}
-              aria-label={mode === 'fix' ? 'Fix it' : mode === 'improve' ? 'Suggest' : 'Send'}
+              title={isCommand ? 'Run' : mode === 'fix' ? 'Fix it' : mode === 'improve' ? 'Suggest' : 'Send'}
+              aria-label={isCommand ? 'Run' : mode === 'fix' ? 'Fix it' : mode === 'improve' ? 'Suggest' : 'Send'}
             >
               <ArrowRight size={17} />
             </button>
@@ -546,9 +607,19 @@ export default function CoderPage() {
       </div>
       {/* The strip under the box, where the reference shows "Local" */}
       <div className="coder-foot">
-        <ModeIcon size={13} style={{ color: MODE_INFO[mode].color }} />
-        <span style={{ color: MODE_INFO[mode].color, fontWeight: 600 }}>{MODE_INFO[mode].label}</span>
-        <span>{MODE_INFO[mode].hint}</span>
+        {isCommand ? (
+          <>
+            <TerminalSquare size={13} style={{ color: '#8EA2E0' }} />
+            <span style={{ color: '#8EA2E0', fontWeight: 600 }}>Command</span>
+            <span>/model shows the models · /model &lt;name&gt; picks one · /model auto goes back to automatic</span>
+          </>
+        ) : (
+          <>
+            <ModeIcon size={13} style={{ color: MODE_INFO[mode].color }} />
+            <span style={{ color: MODE_INFO[mode].color, fontWeight: 600 }}>{MODE_INFO[mode].label}</span>
+            <span>{MODE_INFO[mode].hint}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -634,6 +705,15 @@ export default function CoderPage() {
                         </>
                       ) : m.kind === 'repair' ? (
                         renderRepair(m)
+                      ) : m.kind === 'note' ? (
+                        <div className="coder-note">
+                          <p>{m.text}</p>
+                          {m.items && (
+                            <ul>
+                              {m.items.map((item) => <li key={item}>{item}</li>)}
+                            </ul>
+                          )}
+                        </div>
                       ) : (
                         <>
                           {renderAnswer(m, messages[i - 1])}
@@ -654,6 +734,11 @@ export default function CoderPage() {
                               </span>
                               <ProviderBadge provider={m.meta.provider} model={m.meta.model} />
                               <CachedBadge cached={!!m.meta.cached} />
+                              {modelsQ.data?.selected && `${m.meta.provider}/${m.meta.model}` !== modelsQ.data.selected && (
+                                <span style={{ fontSize: 11, color: '#D9A066' }}>
+                                  fallback: {shortName(modelsQ.data.selected)} was busy
+                                </span>
+                              )}
                             </div>
                           )}
                         </>

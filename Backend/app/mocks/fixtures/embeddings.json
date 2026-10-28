@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "selected": "nvidia",
+  "providers": [
+    {"id": "gemini", "label": "Gemini", "model": "gemini-embedding-2", "available": true},
+    {"id": "nvidia", "label": "NVIDIA", "model": "nvidia/nemotron-3.5-embed-1b", "available": true}
+  ],
+  "adding_vectors": []
+}

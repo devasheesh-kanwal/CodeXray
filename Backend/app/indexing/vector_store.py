@@ -1,11 +1,13 @@
-"""Chroma vector store, one persistent collection per repo.
+"""Chroma vector store: per repo, one persistent collection per embedding model.
 
-The collection records which embedding model made its vectors. Indexing with a
-new model rebuilds it; querying with a different model is refused. Chroma's
-built-in (local) embedding function is never used: vectors always come from
-app/indexing/embedder.py.
+Each collection records which embedding model made its vectors, so Gemini and
+NVIDIA vectors of the same repo live side by side and are never mixed:
+indexing writes the current model's collection, querying reads only it.
+Chroma's built-in (local) embedding function is never used: vectors always
+come from app/indexing/embedder.py.
 """
 
+import hashlib
 from pathlib import Path
 
 import chromadb
@@ -13,7 +15,12 @@ from chromadb.config import Settings as ChromaSettings
 
 from app.indexing.chunker import Chunk
 
-COLLECTION = "chunks"
+LEGACY_COLLECTION = "chunks"  # before switching existed: one collection for the one model
+
+
+def collection_name(model: str) -> str:
+    """Chroma names allow only [a-zA-Z0-9._-], so use a hash of the model id."""
+    return f"chunks-{hashlib.sha256(model.encode('utf-8')).hexdigest()[:16]}"
 
 
 class EmbeddingModelMismatch(Exception):
@@ -33,17 +40,15 @@ class VectorStore:
 
     @classmethod
     def for_indexing(cls, path: Path, model: str) -> "VectorStore":
-        """Open the collection; start over if it was built with another model."""
+        """Open (or create) this model's collection. Other models' collections are kept."""
         client = _client(path)
-        existing = {c.name for c in client.list_collections()}
-        if COLLECTION in existing:
-            collection = client.get_collection(COLLECTION, embedding_function=None)
-            if (collection.metadata or {}).get("embedding_model") == model:
-                return cls(collection)
-            client.delete_collection(COLLECTION)
+        if LEGACY_COLLECTION in {c.name for c in client.list_collections()}:
+            legacy = client.get_collection(LEGACY_COLLECTION, embedding_function=None)
+            if (legacy.metadata or {}).get("embedding_model") == model:
+                client.delete_collection(LEGACY_COLLECTION)  # rebuilt below, from the embedding cache
         return cls(
-            client.create_collection(
-                COLLECTION,
+            client.get_or_create_collection(
+                collection_name(model),
                 embedding_function=None,
                 metadata={"embedding_model": model},
                 configuration={"hnsw": {"space": "cosine"}},
@@ -52,15 +57,17 @@ class VectorStore:
 
     @classmethod
     def for_query(cls, path: Path, model: str) -> "VectorStore":
-        """Open for searching. Raises EmbeddingModelMismatch if the model differs."""
-        collection = _client(path).get_collection(COLLECTION, embedding_function=None)
-        stored = (collection.metadata or {}).get("embedding_model")
-        if stored != model:
-            raise EmbeddingModelMismatch(
-                f"index was built with '{stored}', but GEMINI_EMBEDDING_MODEL is '{model}'. "
-                "Re-index the repo."
-            )
-        return cls(collection)
+        """Open this model's collection. Raises EmbeddingModelMismatch if it has none."""
+        client = _client(path)
+        names = {c.name for c in client.list_collections()}
+        for name in (collection_name(model), LEGACY_COLLECTION):
+            if name in names:
+                collection = client.get_collection(name, embedding_function=None)
+                if (collection.metadata or {}).get("embedding_model") == model:
+                    return cls(collection)
+        raise EmbeddingModelMismatch(
+            f"the index has no vectors from '{model}' yet. Re-index the repo."
+        )
 
     def replace_all(self, chunks: list[Chunk], vectors: list[list[float]]) -> None:
         """Make the collection hold exactly these chunks."""

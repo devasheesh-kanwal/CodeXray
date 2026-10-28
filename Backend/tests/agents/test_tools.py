@@ -80,10 +80,12 @@ def test_search_code_no_results(ctx):
 
 def test_search_code_records_the_best_score_of_the_run(ctx):
     call(ctx, "search_code", {"query": "kubernetes"})
-    assert ctx.state.artifacts["search"] == {"best_score": 0.0, "mode": "bm25_only", "queries": 1}
+    assert ctx.state.artifacts["search"] == {"best_score": 0.0, "mode": "bm25_only", "queries": 1,
+                                           "embedding_provider": None}
     call(ctx, "search_code", {"query": "parse http header"})
     call(ctx, "search_code", {"query": "kubernetes"})
-    assert ctx.state.artifacts["search"] == {"best_score": 1.0, "mode": "bm25_only", "queries": 3}
+    assert ctx.state.artifacts["search"] == {"best_score": 1.0, "mode": "bm25_only", "queries": 3,
+                                           "embedding_provider": None}
 
 
 def test_read_skeleton_repo_and_file(ctx):

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.indexing.bm25 import BM25Index
 from app.indexing.chunker import Chunk
-from app.indexing.embedder import EmbeddingError, GeminiEmbedder
+from app.indexing.embedder import Embedder, EmbeddingError
 from app.indexing.vector_store import VectorStore
 
 logger = logging.getLogger("codexray.search")
@@ -30,6 +30,7 @@ class SearchResult(BaseModel):
     hits: list[SearchHit]
     best_score: float  # 0..1, how well the best result matches (for "not found")
     mode: Literal["hybrid", "bm25_only"]
+    embedding_provider: str | None = None  # whose vectors scored best_score in hybrid mode
 
 
 def reciprocal_rank_fusion(rankings: list[list[str]], k: int = RRF_K) -> dict[str, float]:
@@ -49,7 +50,7 @@ class RepoSearch:
         chunks: list[Chunk],
         bm25: BM25Index,
         vectors: VectorStore | None = None,
-        embedder: GeminiEmbedder | None = None,
+        embedder: Embedder | None = None,
     ) -> None:
         self.chunks = {c.id: c for c in chunks}
         self.bm25 = bm25
@@ -75,7 +76,9 @@ class RepoSearch:
             self.bm25.coverage(query, bm25_ids[0]) if bm25_ids else 0.0,
         )
         mode = "hybrid" if self.vectors is not None else "bm25_only"
-        return SearchResult(hits=hits, best_score=round(best_score, 4), mode=mode)
+        provider = self.embedder.provider if mode == "hybrid" and self.embedder else None
+        return SearchResult(hits=hits, best_score=round(best_score, 4), mode=mode,
+                            embedding_provider=provider)
 
     async def _vector_search(self, query: str) -> list[tuple[str, float]]:
         if self.vectors is None or self.embedder is None:

@@ -5,7 +5,8 @@ import re
 import pytest
 from pydantic import TypeAdapter
 
-from app.api.schemas.llm import LlmStatus
+from app.api.schemas.embeddings import EmbeddingsResponse
+from app.api.schemas.llm import LlmStatus, ModelsResponse
 from app.api.schemas.qa import AskResponse
 from app.api.schemas.repos import (
     AddRepoResponse,
@@ -35,6 +36,10 @@ MOCK_RESPONSES = [
     ("get", "/api/repos/r1/rules", None, 200, RulesResponse),
     ("post", "/api/repos/r1/repair", {"issue": "Delete returns 500"}, 202, RepairStarted),
     ("get", "/api/llm/status", None, 200, LlmStatus),
+    ("get", "/api/llm/models", None, 200, ModelsResponse),
+    ("put", "/api/llm/selection", {"model": None}, 200, ModelsResponse),
+    ("get", "/api/embeddings", None, 200, EmbeddingsResponse),
+    ("put", "/api/embeddings/selection", {"provider": "gemini"}, 200, EmbeddingsResponse),
 ]
 
 

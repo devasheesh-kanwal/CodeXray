@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import health, llm, qa, repair, repos, review
+from app.api import embeddings, health, llm, qa, repair, repos, review
 from app.config import Settings, load_settings
 from app.errors import ErrorResponse, register_error_handlers
 from app.indexing.service import IndexService
@@ -65,7 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     register_error_handlers(app)
 
-    for module in (health, repos, qa, review, repair, llm):
+    for module in (health, repos, qa, review, repair, llm, embeddings):
         app.include_router(module.router)
 
     def frontend_file(path: str = "") -> FileResponse:

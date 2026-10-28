@@ -11,6 +11,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, TypeVar
 
 import httpx2
@@ -18,7 +19,7 @@ import openai
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
-from app.api.schemas.llm import LlmStatus
+from app.api.schemas.llm import LlmStatus, ModelInfo, ModelsResponse
 from app.config import Settings
 from app.llm import jsonout
 from app.llm.cache import LLMCache, cache_key
@@ -30,8 +31,8 @@ from app.llm.errors import (
     LLMError,
     LLMStreamError,
 )
-from app.llm.providers import BASE_URLS, key_pools
-from app.llm.routes import LaneEntry, load_routes
+from app.llm.providers import base_urls, key_pools
+from app.llm.routes import LaneEntry, add_extra_models, load_routes
 from app.llm.state import CallRecord, RouterState
 from app.llm.types import LLMResponse, ToolCall
 
@@ -41,6 +42,7 @@ Message = dict[str, Any]
 T = TypeVar("T", bound=BaseModel)
 
 DEFAULT_COOLDOWN_S = 60.0
+STICKY_S = 300.0  # after a switch, a lane stays on the model that answered this long
 RETRY_DELAY_S = 2.0
 REPLY_RESERVE_TOKENS = 1024  # room left for the answer when checking max_context
 MODELS_CHECK_TIMEOUT_S = 10.0
@@ -147,9 +149,17 @@ class LLMRouter:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.time,
     ) -> None:
-        self.lanes = lanes if lanes is not None else load_routes()
-        self.keys = key_pools(settings)
+        extras = settings.extra_provider_configs()
+        self.lanes = add_extra_models(lanes if lanes is not None else load_routes(), extras)
+        self.keys = key_pools(settings, extras)
+        self.base_urls = base_urls(extras)
         self.cache = LLMCache(settings.data_path / "cache.sqlite")
+        # The model the user picked ("provider/model"), tried first in every lane; None = auto.
+        self.selection_file = settings.data_path / "llm_selection.json"
+        self.selected: str | None = self._load_selection()
+        # After a switch, each lane keeps trying the model that answered first for STICKY_S,
+        # instead of flipping back to its first entry as soon as that one's cooldown ends.
+        self.sticky: dict[str, tuple[str, float]] = {}  # lane -> (model label, until)
         self.demo_mode = settings.demo_mode
         self.timeout = settings.llm_timeout_s
         self.transport = transport
@@ -283,6 +293,77 @@ class LLMRouter:
     def status(self) -> LlmStatus:
         return self.state.status(self.keys)
 
+    # ---------- model selection ----------
+
+    def catalog(self) -> dict[str, LaneEntry]:
+        """Every model in any lane, by "provider/model" (first entry wins for max_context)."""
+        models: dict[str, LaneEntry] = {}
+        for entries in self.lanes.values():
+            for entry in entries:
+                models.setdefault(entry.label, entry)
+        return models
+
+    def select(self, model: str | None) -> None:
+        """Pick the model tried first in every lane (None = automatic). Saved across restarts.
+        Raises ValueError for a model that is in no lane."""
+        if model is not None and model not in self.catalog():
+            raise ValueError(f"Unknown model '{model}'. Known: {sorted(self.catalog())}")
+        self.selected = model
+        self.selection_file.parent.mkdir(parents=True, exist_ok=True)
+        self.selection_file.write_text(json.dumps({"model": model}), encoding="utf-8")
+
+    def models(self) -> ModelsResponse:
+        """Data for GET /api/llm/models: the selection and every model's current state."""
+        lanes_of: dict[str, list[str]] = {}
+        for lane, entries in self.lanes.items():
+            for entry in entries:
+                lanes_of.setdefault(entry.label, []).append(lane)
+        return ModelsResponse(
+            mode="manual" if self.selected else "auto",
+            selected=self.selected,
+            models=[self._model_info(entry, lanes_of[label]) for label, entry in self.catalog().items()],
+        )
+
+    def _model_info(self, entry: LaneEntry, lanes: list[str]) -> ModelInfo:
+        pool = self.keys[entry.provider]
+        until = self.state.cooldown_until(entry.provider, entry.model)
+        if not pool.configured:
+            state = "no_keys"
+        elif not pool.active():
+            state = "disabled"
+        elif (entry.provider, entry.model) in self.state.missing_models | self.state.forbidden_models:
+            state = "unavailable"
+        elif until:
+            state = "cooldown"
+        else:
+            state = "available"
+        return ModelInfo(
+            id=entry.label, provider=entry.provider, model=entry.model, max_context=entry.max_context,
+            lanes=lanes, state=state,
+            cooldown_until=datetime.fromtimestamp(until, UTC) if until else None,
+        )
+
+    def _load_selection(self) -> str | None:
+        try:
+            model = json.loads(self.selection_file.read_text(encoding="utf-8")).get("model")
+        except (OSError, ValueError):
+            return None
+        return model if model in self.catalog() else None  # a model removed from the lanes is dropped
+
+    def _ordered(self, lane: str) -> list[LaneEntry]:
+        """The lane's entries in the order to try: the picked model, the lane's sticky model, the rest."""
+        entries = self.lanes[lane]
+        first = [self.catalog()[self.selected]] if self.selected else []
+        label, until = self.sticky.get(lane, ("", 0.0))
+        if until > self.clock():
+            first += [e for e in entries if e.label == label]
+        ordered, seen = [], set()
+        for entry in first + entries:
+            if entry.label not in seen:
+                seen.add(entry.label)
+                ordered.append(entry)
+        return ordered
+
     async def check_models(self) -> list[str]:
         """Ask each enabled provider for its model list; skip configured models it lacks.
 
@@ -362,7 +443,7 @@ class LLMRouter:
         attempts: list[Attempt] = []
         switch_reason: str | None = None
 
-        for entry in self.lanes[lane]:
+        for entry in self._ordered(lane):
             skip = self._skip_reason(entry, needed, exclude, overflowed_at)
             if skip:
                 attempts.append(Attempt(entry.label, "skipped", skip))
@@ -370,6 +451,8 @@ class LLMRouter:
             started = self.clock()
             try:
                 result = await self._try_entry(entry, call)
+                if switch_reason:  # it answered after another model failed: stay with it for a while
+                    self.sticky[lane] = (entry.label, self.clock() + STICKY_S)
                 return Success(entry, result, started, switch_reason)
             except EntryFailed as failed:
                 attempts.append(Attempt(entry.label, failed.outcome, failed.detail))
@@ -458,7 +541,7 @@ class LLMRouter:
             )
             self._clients[(provider, index)] = AsyncOpenAI(
                 api_key=key,
-                base_url=BASE_URLS[provider],
+                base_url=self.base_urls[provider],
                 timeout=self.timeout,
                 max_retries=0,  # the router does its own retries
                 http_client=http_client,
@@ -482,6 +565,8 @@ class LLMRouter:
             response = LLMResponse(**hit, cached=True, latency_ms=self._ms_since(started))
             if reuse is not None and not self.demo_mode and not reuse(response):
                 return None
+            if self.selected and not self.demo_mode and f"{hit['provider']}/{hit['model']}" != self.selected:
+                return None  # a model was picked: let it answer instead of replaying another model
             self.state.record(
                 CallRecord(lane, response.provider, response.model, ok=True,
                            latency_ms=response.latency_ms, cached=True)

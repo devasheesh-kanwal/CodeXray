@@ -6,7 +6,8 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from app.api.schemas.llm import LlmStatus
+from app.api.schemas.embeddings import EmbeddingsResponse
+from app.api.schemas.llm import LlmStatus, ModelsResponse
 from app.api.schemas.qa import AskResponse
 from app.api.schemas.repos import (
     RepoGraph,
@@ -32,6 +33,8 @@ FIXTURE_MODELS: dict[str, Any] = {
     "rules": RulesResponse,
     "repair_script": RepairScript,
     "llm_status": LlmStatus,
+    "llm_models": ModelsResponse,
+    "embeddings": EmbeddingsResponse,
 }
 
 

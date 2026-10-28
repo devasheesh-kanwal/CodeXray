@@ -1,6 +1,6 @@
 """Provider base URLs and per-provider API key pools."""
 
-from app.config import Settings, mask_key
+from app.config import ExtraProvider, Settings, mask_key
 
 # All providers speak the OpenAI chat-completions API at these base URLs.
 BASE_URLS = {
@@ -35,11 +35,19 @@ class KeyPool:
         return mask_key(self.keys[index])
 
 
-def key_pools(settings: Settings) -> dict[str, KeyPool]:
+def base_urls(extras: list[ExtraProvider]) -> dict[str, str]:
+    """Base URL of every provider: the built-in ones, then the EXTRA_PROVIDERS from .env."""
+    return {**BASE_URLS, **{p.name: p.base_url for p in extras}}
+
+
+def key_pools(settings: Settings, extras: list[ExtraProvider] | None = None) -> dict[str, KeyPool]:
     """Key pools from settings (<PROVIDER>_API_KEYS). Empty pool = provider disabled."""
-    return {
+    pools = {
         name: KeyPool(
             [k.get_secret_value() for k in getattr(settings, f"{name}_api_keys")]
         )
         for name in PROVIDERS
     }
+    for extra in extras or []:
+        pools[extra.name] = KeyPool([k.get_secret_value() for k in extra.keys])
+    return pools

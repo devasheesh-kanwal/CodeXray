@@ -3,10 +3,12 @@ import type { AskStreamEvent, RepairRun } from '../types';
 import type { RepairStreamHandlers } from '../client';
 import {
   delay, mockRepos, mockStatus, mockTree, mockGraph, mockFiles, mockAsk,
-  mockReview, mockRules, mockRepairRun, mockRepairEvents, mockLLMStatus,
+  mockReview, mockRules, mockRepairRun, mockRepairEvents, mockLLMStatus, mockModels,
 } from './data';
 
 let repairRun: RepairRun = { ...mockRepairRun };
+let pickedModel: string | null = null;
+let pickedEmbedding: 'gemini' | 'nvidia' = 'nvidia';
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -26,6 +28,25 @@ export async function mockFetch(path: string, options?: RequestInit): Promise<Re
 
   if (p === '/api/health') return json({ status: 'ok', version: 'mock', mock_mode: true, demo_mode: false });
   if (p === '/api/llm/status') return json(mockLLMStatus);
+  if (p === '/api/llm/models' || (p === '/api/llm/selection' && method === 'PUT')) {
+    if (method === 'PUT') {
+      if (body.model !== null && !mockModels.models.some((m) => m.id === body.model)) {
+        return error(422, 'VALIDATION_ERROR', `Unknown model '${body.model}'`);
+      }
+      pickedModel = body.model;
+    }
+    return json({ ...mockModels, mode: pickedModel ? 'manual' : 'auto', selected: pickedModel });
+  }
+  if (p === '/api/embeddings' || (p === '/api/embeddings/selection' && method === 'PUT')) {
+    if (method === 'PUT') pickedEmbedding = body.provider;
+    return json({
+      enabled: true, selected: pickedEmbedding, adding_vectors: [],
+      providers: [
+        { id: 'gemini', label: 'Gemini', model: 'gemini-embedding-2', available: true },
+        { id: 'nvidia', label: 'NVIDIA', model: 'nvidia/nemotron-3.5-embed-1b', available: true },
+      ],
+    });
+  }
   if (p === '/api/repos' && method === 'GET') return json(mockRepos);
   if (p === '/api/repos' && method === 'POST') return json({ repo_id: 'repo_flask_todo', status: 'queued' }, 202);
   if ((m = p.match(/^\/api\/repos\/[^/]+\/(\w+)$/))) {
