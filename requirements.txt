@@ -1,3 +1,6 @@
-# CodeXray Python backend dependencies
-# Install from the Backend directory: python -m pip install -r requirements.txt
+# CodeXray backend dependencies (Python only).
+# Install from the repository root with: python -m pip install -r requirements.txt
 -r Backend/requirements.txt
+# Frontend dependencies are Node.js packages, not Python requirements.
+# Install/build them from "Frontend Main/" with npm ci && npm run build.
+# On Render, use a Node-capable build step or deploy the frontend as a separate static site.

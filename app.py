@@ -46,20 +46,27 @@ def main() -> int:
         sys.executable,
     )
     missing: list[str] = []
+    production = bool(os.environ.get("RENDER") or os.environ.get("PORT"))
 
     if not (BACKEND / "app" / "main.py").is_file():
         missing.append(f"Backend entrypoint is missing: {BACKEND / 'app' / 'main.py'}")
-    if not (FRONTEND / "package.json").is_file():
+    if not production and not (FRONTEND / "package.json").is_file():
         missing.append(f"Frontend package.json is missing: {FRONTEND / 'package.json'}")
-    if npm is None:
+    if not production and npm is None:
         missing.append("Node.js/npm is not installed or is not available on PATH.")
-    if not (FRONTEND / "node_modules").is_dir():
+    if not production and not (FRONTEND / "node_modules").is_dir():
         missing.append(f"Frontend dependencies are missing; run `npm install` in {FRONTEND}.")
     if missing:
         print("Cannot start CodeXray:", file=sys.stderr)
         for message in missing:
             print(f"  - {message}", file=sys.stderr)
         return 1
+    # Render and other production hosts provide PORT and expose one service.
+    # In that mode, run only the API; serve the built frontend separately/static.
+    if production:
+        port = int(os.environ.get("PORT", "8000"))
+        os.execv(python, [python, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(port)])
+
     frontend_port = available_port(5173)
     frontend_origin = f"http://127.0.0.1:{frontend_port}"
     backend_env = os.environ.copy()
