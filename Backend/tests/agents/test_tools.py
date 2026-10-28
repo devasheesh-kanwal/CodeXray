@@ -196,6 +196,63 @@ def test_write_patch_rejects_a_diff_that_does_not_apply(worktree_ctx):
     assert not (worktree_ctx.worktree / "shop" / "db.py").read_text().endswith("# saved\n")
 
 
+FIX = """--- a/shop/db.py
++++ b/shop/db.py
+@@ -9,2 +9,2 @@ def get_user_by_id(user_id: int) -> User | None:
+     \"\"\"Look up one user.\"\"\"
+-    return USERS.get(user_id)
++    return USERS.get(int(user_id))
+"""
+
+
+def _fixed(worktree_ctx) -> bool:
+    return "USERS.get(int(user_id))" in (worktree_ctx.worktree / "shop" / "db.py").read_text()
+
+
+def test_write_patch_accepts_paths_without_a_b_prefixes(worktree_ctx):
+    # "--- shop/db.py" used to fail: git's -p1 stripped "shop/" and looked for "db.py".
+    bare = FIX.replace("a/shop/", "shop/").replace("b/shop/", "shop/")
+    result = call(worktree_ctx, "write_patch", {"diff": bare})
+    assert result.ok, result.text
+    assert _fixed(worktree_ctx)
+    assert worktree_ctx.state.artifacts["patch"] == FIX  # stored with normal headers
+
+
+def test_write_patch_accepts_wrong_hunk_line_numbers_and_counts(worktree_ctx):
+    wrong = FIX.replace("@@ -9,2 +9,2 @@", "@@ -24,4 +24,7 @@")
+    result = call(worktree_ctx, "write_patch", {"diff": wrong})
+    assert result.ok, result.text
+    assert _fixed(worktree_ctx)
+
+
+def test_write_patch_matches_old_lines_by_content_when_git_cannot(worktree_ctx):
+    # Trailing spaces on a context line and an empty context line without its leading space.
+    sloppy = """--- a/shop/db.py
++++ b/shop/db.py
+@@ -1,1 +1,1 @@
+     \"\"\"Look up one user.\"\"\"
+-    return USERS.get(user_id)
++    return USERS.get(int(user_id))
+
+"""
+    result = call(worktree_ctx, "write_patch", {"diff": sloppy})
+    assert result.ok, result.text
+    assert _fixed(worktree_ctx)
+
+
+def test_write_patch_by_content_refuses_ambiguous_old_lines(worktree_ctx):
+    before = (worktree_ctx.worktree / "shop" / "db.py").read_text()
+    ambiguous = """--- a/shop/db.py
++++ b/shop/db.py
+@@ -1,1 +1,1 @@
+-
++# changed
+"""
+    result = call(worktree_ctx, "write_patch", {"diff": ambiguous})
+    assert not result.ok and "does not apply" in result.text
+    assert (worktree_ctx.worktree / "shop" / "db.py").read_text() == before
+
+
 def test_write_patch_needs_a_worktree_inside_the_root(ctx, worktree_ctx, tmp_path):
     worktree_ctx.worktrees_root = tmp_path / "somewhere_else"
     assert "outside the repair worktrees" in call(worktree_ctx, "write_patch", {"diff": PATCH}).text

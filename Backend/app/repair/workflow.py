@@ -42,7 +42,7 @@ from app.agents.tools import ToolContext, ToolRegistry, default_registry, is_tes
 from app.api.schemas.repair import EvalResult
 from app.config import Settings
 from app.indexing.service import IndexService
-from app.llm import LLMError, LLMRouter
+from app.llm import DemoCacheMiss, LLMError, LLMRouter
 from app.llm.router import is_excluded
 from app.repair import eval_gate, git_ops
 from app.repair.agents import MAX_FILES, RepairArchitect, RepairArchitectInput
@@ -75,6 +75,7 @@ class RepairWorkflow(Workflow):
     start = "CREATED"
     final_states = frozenset({"AWAITING_APPROVAL", "FAILED"})
     review_retry_max_wait_s = 60.0  # tests set 0
+    model_retry_max_wait_s = 60.0  # tests set 0
 
     def __init__(
         self,
@@ -187,6 +188,10 @@ class RepairWorkflow(Workflow):
             output = await debugger.run(data, state)
         except AgentError as exc:
             return self._attempt_failed(state, f"The Debugger gave no valid diagnosis: {first_line(exc)}")
+        except DemoCacheMiss:
+            raise
+        except LLMError as exc:
+            return await self._models_unavailable(state, "debugger", Debugger.lane, exc)
         state.artifacts["hypothesis"] = output.model_dump()
         return "PATCHING"
 
@@ -205,6 +210,12 @@ class RepairWorkflow(Workflow):
             await Repair(self.router, self.tools, ctx).run(data, state)
         except AgentError as exc:
             agent_error = first_line(exc)
+        except DemoCacheMiss:
+            raise
+        except LLMError as exc:
+            if not git_ops.worktree_diff(self.worktree(state)).strip():
+                return await self._models_unavailable(state, "repair", Repair.lane, exc)
+            agent_error = first_line(exc)  # a patch was written before the models gave out: test it
 
         rejections = state.artifacts["patch_rejections"]
         policy = [r["reason"] for r in rejections if r["policy"]]
@@ -276,12 +287,25 @@ class RepairWorkflow(Workflow):
         return "AWAITING_APPROVAL"
 
     def _review_wait(self, exclude: list[str]) -> float:
-        """Seconds until the first reviewer model leaves its cooldown (5 s if none is cooling down)."""
+        return self._lane_wait("reviewer", self.review_retry_max_wait_s, exclude)
+
+    def _lane_wait(self, lane: str, cap: float, exclude: list[str] | None = None) -> float:
+        """Seconds until the lane's first model leaves its cooldown (5 s if none is cooling down), at most cap."""
         now = time.time()
         ends = [self.router.state.cooldown_until(e.provider, e.model)
-                for e in self.router.lanes.get("reviewer", []) if not is_excluded(e.provider, e.model, exclude)]
+                for e in self.router.lanes.get(lane, []) if not is_excluded(e.provider, e.model, exclude or [])]
         waits = [end - now + 1 for end in ends if end]
-        return max(0.0, min(self.review_retry_max_wait_s, min(waits) if waits else 5.0))
+        return max(0.0, min(cap, min(waits) if waits else 5.0))
+
+    async def _models_unavailable(self, state: RunState, agent: str, lane: str, exc: LLMError) -> str:
+        """No model in the lane answered (rate limits, outage): that fails this attempt, not the run.
+        Before the next attempt, wait for the lane's first model to cool down."""
+        wait = self._lane_wait(lane, self.model_retry_max_wait_s) if state.attempt < MAX_ATTEMPTS else 0.0
+        state.emit("agent_error", f"{agent} unavailable ({first_line(exc)}); attempt {state.attempt} fails"
+                   + (f", the next one starts in {wait:.0f} s." if state.attempt < MAX_ATTEMPTS else "."),
+                   agent=agent, recoverable=state.attempt < MAX_ATTEMPTS)
+        await asyncio.sleep(wait)
+        return self._attempt_failed(state, f"No model could answer for the {agent}: {first_line(exc)}")
 
     async def cleanup(self, state: RunState) -> str:
         """Failure note, delete the branch, then retry from DIAGNOSING or give up."""

@@ -283,6 +283,32 @@ def test_reviewer_down_twice_fails_the_run_instead_of_reaching_approval(kit):
     assert len(kit.worktrees()) == 1 and kit.branches() == ["main"]
 
 
+def test_models_down_fail_one_attempt_and_the_loop_goes_on(kit):
+    # Every model of the Debugger's lane is down during attempt 1: that attempt fails,
+    # the run does not; attempt 2 fixes the bug.
+    kit.fake.on("arch-m", architect_picks("inventory/stock.py"))
+    down = error(500, "down")  # the router retries a server error once, so twice takes the lane down
+    kit.fake.on("code-m", down, down, diagnosis("top_sellers slices one item short"), *patch(FIX))
+    kit.fake.on("review-m", review())
+    state = kit.run()
+    run = kit.service.snapshot(state.run_id)
+
+    assert run.state == "AWAITING_APPROVAL" and run.attempt == 2
+    assert any("debugger unavailable" in e.message for e in run.events)
+    assert state.artifacts["attempts"][0]["reason"].startswith("No model could answer for the debugger")
+
+
+def test_models_down_on_every_attempt_fail_the_run_after_3_attempts(kit):
+    kit.fake.on("arch-m", architect_picks("inventory/stock.py"))
+    kit.fake.on("code-m", error(500, "down"))
+    state = kit.run()
+    run = kit.service.snapshot(state.run_id)
+
+    assert run.state == "FAILED" and run.attempt == 3
+    assert state.artifacts["failure_reason"] == "Gave up after 3 failed attempts."
+    assert len(kit.worktrees()) == 1 and kit.branches() == ["main"]
+
+
 def test_reviewer_down_once_is_retried(kit):
     kit.fake.on("arch-m", architect_picks("inventory/stock.py"))
     kit.fake.on("code-m", diagnosis("top_sellers slices one item short"), *patch(FIX))

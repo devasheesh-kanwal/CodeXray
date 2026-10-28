@@ -163,6 +163,7 @@ class Agent:
         async for piece in self.router.stream(
             self.lane, messages, temperature=self.temperature,
             exclude_models=exclude, max_tokens=self.max_output_tokens,
+            replay=self._replayable,
         ):
             if isinstance(piece, LLMResponse):
                 self._account(state, piece)
@@ -250,28 +251,32 @@ class Agent:
         return await self._final_answer(state, messages, mode, exclude, step)
 
     async def _final_answer(self, state, messages, mode, exclude, step):
-        """Step limit reached: ask once for a final answer with what it has."""
+        """Step limit reached: ask for a final answer with what it has. A model that
+        still calls a tool is asked once more with no tools offered (JSON protocol)."""
         started = time.monotonic()
-        messages = [*messages, {"role": "user", "content": (
-            "You have used all your steps. Do not call any more tools. Reply now with only "
-            '{"final": <answer matching the schema>} based on what you have found.')}]
-        specs = self.tools.specs(self.allowed_tools) if mode == "native" else None
-        response = await self._ask(state, messages, specs, exclude)
-        if not response.tool_calls:
-            kind, payload = parse_reply(response.text)
-            output, _ = self._validate(kind, payload)
-            if output is not None:
-                return output, step + 1, _ms(started)
+        last_request = 2 if mode == "native" else 1
+        for request in range(1, last_request + 1):
+            final_messages = [*messages, {"role": "user", "content": (
+                "You have used all your steps. Do not call any more tools. Reply now with only "
+                '{"final": <answer matching the schema>} based on what you have found.')}]
+            specs = self.tools.specs(self.allowed_tools) if mode == "native" else None
+            response = await self._ask(state, final_messages, specs, exclude, final_only=True)
+            if self._usable_final(response):
+                output, _ = self._validate(*parse_reply(response.text))
+                return output, step + request, _ms(started)
+            if request < last_request:
+                mode, messages = self._switch_to_json(state, messages, step, "model kept calling tools at the step limit")
         raise AgentStepLimit(f"{self.name} reached {self.max_steps} steps without a valid final answer")
 
     # ---------- helpers ----------
 
-    async def _ask(self, state: RunState, messages, specs, exclude) -> LLMResponse:
+    async def _ask(self, state: RunState, messages, specs, exclude, final_only: bool = False) -> LLMResponse:
+        """final_only: the request for a final answer, where another tool call is no use."""
         state.check_budget()
         response = await self.router.ask(
             self.lane, messages, temperature=self.temperature, tools=specs,
             exclude_models=exclude, max_tokens=self.max_output_tokens,
-            accept=self._usable,
+            accept=self._usable_final if final_only else self._usable, replay=self._replayable,
         )
         self._account(state, response)
         return response
@@ -283,6 +288,19 @@ class Agent:
             return _parse_native_calls(response) is not None
         kind, payload = parse_reply(response.text)
         return kind == "tool" or self._validate(kind, payload)[0] is not None
+
+    def _usable_final(self, response: LLMResponse) -> bool:
+        """A valid final answer (the only usable reply once the steps are used up)."""
+        if response.tool_calls:
+            return False
+        kind, payload = parse_reply(response.text)
+        return kind != "tool" and self._validate(kind, payload)[0] is not None
+
+    def _replayable(self, response: LLMResponse) -> bool:
+        """Whether a cached reply may be reused. Agents return False for verdicts
+        like "nothing found", which depend on which model answered (a busy
+        provider's weaker fallback can miss the code): those are asked again live."""
+        return True
 
     def _account(self, state: RunState, response: LLMResponse) -> None:
         state.charge(response.prompt_tokens, response.completion_tokens)

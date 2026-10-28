@@ -69,6 +69,16 @@ def test_stream_result_is_cached_and_replayed(tmp_path):
     assert len(kit.fake.calls) == 1
 
 
+def test_stream_asks_again_when_replay_rejects_the_cached_text(tmp_path):
+    kit = make_router(tmp_path)
+    kit.fake.on("small-a", stream("NOT_FOUND"), stream("the ", "answer"))
+    live_only = lambda r: r.text != "NOT_FOUND"  # noqa: E731
+    asyncio.run(collect(kit.router.stream(LANE, user("hi"), replay=live_only)))
+    chunks, summary = asyncio.run(collect(kit.router.stream(LANE, user("hi"), replay=live_only)))
+    assert chunks == ["the ", "answer"] and not summary.cached
+    assert len(kit.fake.calls) == 2
+
+
 def test_stream_in_demo_mode_never_calls(tmp_path):
     kit = make_router(tmp_path, demo_mode=True)
     with pytest.raises(DemoCacheMiss):
