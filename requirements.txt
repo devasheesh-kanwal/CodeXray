@@ -1,0 +1,3 @@
+# CodeXray Python backend dependencies
+# Install from the Backend directory: python -m pip install -r requirements.txt
+-r Backend/requirements.txt
