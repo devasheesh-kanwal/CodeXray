@@ -41,6 +41,40 @@ def test_a_cached_answer_that_is_now_rejected_is_asked_again(tmp_path):
     assert response.text == "good" and len(kit.fake.calls) == 2
 
 
+def test_a_cached_answer_replay_rejects_is_stored_but_asked_again(tmp_path):
+    # A "nothing found" verdict is kept (for DEMO_MODE) but never replayed live.
+    kit = make_router(tmp_path)
+    kit.fake.on("small-a", ok("nothing found"), ok("found it"))
+    live_only = lambda r: r.text != "nothing found"  # noqa: E731
+
+    first = asyncio.run(kit.router.ask(LANE, user("q"), replay=live_only))
+    second = asyncio.run(kit.router.ask(LANE, user("q"), replay=live_only))
+    third = asyncio.run(kit.router.ask(LANE, user("q"), replay=live_only))
+
+    assert (first.text, second.text, third.text) == ("nothing found", "found it", "found it")
+    assert (second.cached, third.cached) == (False, True)  # the new answer replaced the old one
+    assert len(kit.fake.calls) == 2
+
+
+def test_a_skipped_cache_hit_is_not_recorded_as_a_cached_call(tmp_path):
+    kit = make_router(tmp_path)
+    kit.fake.on("small-a", ok("nothing found"), ok("found it"))
+    asyncio.run(kit.router.ask(LANE, user("q")))
+    asyncio.run(kit.router.ask(LANE, user("q"), replay=lambda r: r.text != "nothing found"))
+    assert [call.cached for call in kit.router.state.calls] == [False, False]
+
+
+def test_demo_mode_replays_what_replay_rejects(tmp_path):
+    live = make_router(tmp_path)
+    live.fake.on("small-a", ok("nothing found"))
+    asyncio.run(live.router.ask(LANE, user("q")))
+
+    demo = make_router(tmp_path, demo_mode=True)
+    response = asyncio.run(demo.router.ask(LANE, user("q"), replay=lambda r: False))
+    assert response.text == "nothing found" and response.cached
+    assert demo.fake.calls == []
+
+
 def test_cache_survives_a_new_router(tmp_path):
     kit = make_router(tmp_path)
     asyncio.run(kit.router.ask(LANE, user("q")))

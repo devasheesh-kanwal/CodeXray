@@ -355,17 +355,99 @@ def write_patch(ctx: ToolContext, args: PatchArgs) -> ToolResult:
     if changed > MAX_PATCH_LINES:
         _reject(ctx, f"patch too large: {changed} changed lines (limit {MAX_PATCH_LINES})")
 
-    diff = args.diff if args.diff.endswith("\n") else args.diff + "\n"
-    for command in (["git", "apply", "--check", "-"], ["git", "apply", "-"]):
+    diff = normalize_headers(args.diff if args.diff.endswith("\n") else args.diff + "\n")
+    error = _git_apply(worktree, diff)
+    if error is not None:
+        # Models often get the hunk line numbers or counts wrong while the change itself is
+        # right: apply each hunk where its old lines actually are, if that place is unambiguous.
+        fallback_error = apply_hunks_by_content(worktree, diff)
+        if fallback_error is not None:
+            _reject(ctx, f"patch does not apply: {error[:400]} (matching by content: {fallback_error})",
+                    policy=False)
+    previous = ctx.state.artifacts.get("patch") or ""
+    ctx.state.artifacts["patch"] = previous + diff
+    return ToolResult(f"Patch applied to: {', '.join(paths)}", f"patched {len(paths)} file(s)")
+
+
+def normalize_headers(diff: str) -> str:
+    """'--- library/loans.py' -> '--- a/library/loans.py' (and b/ for +++), so git's -p1 finds the file."""
+    lines = []
+    for line in diff.splitlines(keepends=True):
+        if line.startswith(("--- ", "+++ ")):
+            path = line[4:].split("\t")[0].strip()
+            if path != "/dev/null":
+                path = path[2:] if path[:2] in ("a/", "b/") else path
+                line = f"{line[:4]}{'a' if line.startswith('-') else 'b'}/{path}\n"
+        lines.append(line)
+    return "".join(lines)
+
+
+def _git_apply(worktree: Path, diff: str) -> str | None:
+    """Apply with git (--recount: hunk line counts from models are often wrong). None, or git's error."""
+    for command in (["git", "apply", "--recount", "--check", "-"], ["git", "apply", "--recount", "-"]):
         # Bytes, not text: text mode on Windows would turn \n into \r\n and break the diff.
         result = subprocess.run(command, cwd=worktree, input=diff.encode("utf-8"),
                                 capture_output=True, timeout=GIT_TIMEOUT_S)
         if result.returncode != 0:
-            stderr = result.stderr.decode("utf-8", errors="replace").strip()
-            _reject(ctx, f"patch does not apply: {stderr[:500]}", policy=False)
-    previous = ctx.state.artifacts.get("patch") or ""
-    ctx.state.artifacts["patch"] = previous + diff
-    return ToolResult(f"Patch applied to: {', '.join(paths)}", f"patched {len(paths)} file(s)")
+            return result.stderr.decode("utf-8", errors="replace").strip()
+    return None
+
+
+def _file_hunks(diff: str) -> list[tuple[str, list[tuple[list[str], list[str]]]]]:
+    """[(path, [(old lines, new lines) per hunk])] from a unified diff, ignoring @@ numbers."""
+    files: list[tuple[str, list]] = []
+    hunk = None
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            files.append((patched_paths(line)[0] if patched_paths(line) else "", []))
+            hunk = None
+        elif line.startswith("--- "):
+            hunk = None
+        elif line.startswith("@@"):
+            if not files:
+                raise ValueError("a hunk before any file header")
+            hunk = ([], [])
+            files[-1][1].append(hunk)
+        elif hunk is not None and not line.startswith("\\"):
+            kind, text = (line[:1], line[1:]) if line else (" ", "")  # models drop the space of empty lines
+            if kind in (" ", "-"):
+                hunk[0].append(text)
+            if kind in (" ", "+"):
+                hunk[1].append(text)
+    return files
+
+
+def apply_hunks_by_content(worktree: Path, diff: str) -> str | None:
+    """Apply each hunk where its old lines appear exactly once (trailing spaces ignored).
+
+    All files are checked before any is written, so a failure changes nothing.
+    Returns None on success, or why it could not apply.
+    """
+    try:
+        files = _file_hunks(diff)
+    except ValueError as exc:
+        return str(exc)
+    updated: dict[Path, str] = {}
+    for path, hunks in files:
+        target = (worktree / path).resolve()
+        if not path or not target.is_relative_to(worktree) or not target.is_file():
+            return f"{path or 'a file'} does not exist"
+        raw = updated.get(target) or target.read_bytes().decode("utf-8")
+        newline = "\r\n" if "\r\n" in raw else "\n"
+        lines = raw.replace("\r\n", "\n").split("\n")
+        for old, new in hunks:
+            if not any(s.strip() for s in old):
+                return f"a hunk in {path} has no old lines to find"
+            wanted = [s.rstrip() for s in old]
+            spots = [i for i in range(len(lines) - len(old) + 1)
+                     if [s.rstrip() for s in lines[i:i + len(old)]] == wanted]
+            if len(spots) != 1:
+                return f"the old lines of a hunk in {path} were found {len(spots)} times, not once"
+            lines[spots[0]:spots[0] + len(old)] = new
+        updated[target] = newline.join(lines)
+    for target, text in updated.items():
+        target.write_bytes(text.encode("utf-8"))
+    return None
 
 
 # ---------- write_test ----------

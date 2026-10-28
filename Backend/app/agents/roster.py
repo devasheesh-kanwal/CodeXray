@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.agents.base import Agent
+from app.llm import LLMResponse
 
 Severity = Literal["critical", "high", "medium", "low"]
 Category = Literal["bug", "security", "practice", "design"]
@@ -75,6 +76,10 @@ class Explainer(Agent):
     allowed_tools = ("read_file",)
     max_steps = 3  # up to 2 read_file calls, then the answer
     max_output_tokens = 3000
+
+    def _replayable(self, response: LLMResponse) -> bool:
+        """Never replay a cached NOT_FOUND reply: ask the model again."""
+        return not response.text.lstrip().startswith("NOT_FOUND")
 
     def summarize(self, output: ExplainerOutput) -> str:
         if output.text.lstrip().startswith("NOT_FOUND"):

@@ -200,6 +200,7 @@ def make_kit(tmp_path: Path, lanes=None, without_tests: bool = False) -> Kit:
 def no_review_retry_wait(monkeypatch):
     """The Reviewer's retry would wait for a cooldown; tests never sleep."""
     monkeypatch.setattr(RepairWorkflow, "review_retry_max_wait_s", 0.0)
+    monkeypatch.setattr(RepairWorkflow, "model_retry_max_wait_s", 0.0)
 
 
 @pytest.fixture

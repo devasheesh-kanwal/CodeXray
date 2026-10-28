@@ -58,6 +58,58 @@ def test_not_found_answer_reports_cached_when_replayed(qa):
     assert (first.cached, second.cached) == (False, True)
 
 
+def test_architect_found_false_is_asked_again_not_replayed(qa):
+    # A busy provider's fallback once said "nothing found"; asking again must reach a model,
+    # not replay that verdict from the cache forever.
+    qa.fake.on(ARCHITECT_MODEL, search("find user"), select(found=False), select(FIND_USER))
+    qa.fake.on(EXPLAINER_MODEL, answer("find_user loads the user [shop/services.py:13-17]."))
+
+    first = qa.ask()
+    second = qa.ask()
+
+    assert first.not_found and not second.not_found
+    assert qa.models_called().count(ARCHITECT_MODEL) == 3  # the search step was replayed, the verdict was not
+
+
+def test_step_limit_falls_back_to_a_final_request_without_tools(qa):
+    # Six searches, a tool call even when asked for the final answer, then the answer once
+    # no tools are offered at all.
+    steps = [search("find user")] * 6
+    qa.fake.on(ARCHITECT_MODEL, *steps, search("find user"), select(FIND_USER))
+    qa.fake.on(EXPLAINER_MODEL, answer("find_user loads the user [shop/services.py:13-17]."))
+
+    result = qa.ask()
+
+    assert not result.not_found
+    final_request = qa.fake.calls[7].body
+    assert "tools" not in final_request  # the second final request offered no tools
+
+
+def test_tool_call_instead_of_a_final_answer_at_the_step_limit_is_not_replayed(qa):
+    # Both final requests get a tool call: not found. Asked again, the final request must
+    # reach a model, not replay those tool calls from the cache.
+    steps = [search("find user")] * 6
+    qa.fake.on(ARCHITECT_MODEL, *steps, search("find user"), search("find user"), select(FIND_USER))
+    qa.fake.on(EXPLAINER_MODEL, answer("find_user loads the user [shop/services.py:13-17]."))
+
+    first = qa.ask()
+    second = qa.ask()
+
+    assert first.not_found and not second.not_found
+    assert qa.models_called().count(ARCHITECT_MODEL) == 9  # 6 steps + 2 final requests, then 1 live final request
+
+
+def test_explainer_not_found_is_asked_again_not_replayed(qa):
+    qa.fake.on(ARCHITECT_MODEL, search("find user"), select(FIND_USER))
+    qa.fake.on(EXPLAINER_MODEL, answer("NOT_FOUND"), answer("find_user loads the user [shop/services.py:13-17]."))
+
+    first = qa.ask()
+    second = qa.ask()
+
+    assert first.not_found and not second.not_found
+    assert second.citations and second.citations[0].file == "shop/services.py"
+
+
 def test_architect_found_false_is_not_found(qa):
     qa.fake.on(ARCHITECT_MODEL, search("find user"), select(found=False))
     assert qa.ask().not_found

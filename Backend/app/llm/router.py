@@ -169,16 +169,21 @@ class LLMRouter:
         exclude_models: list[str] | None = None,
         max_tokens: int | None = None,
         accept: Callable[[LLMResponse], bool] | None = None,
+        replay: Callable[[LLMResponse], bool] | None = None,
     ) -> LLMResponse:
         """One chat completion, with fallback and caching.
 
         With `accept`, only answers it accepts are cached, and a cached answer
         it rejects is ignored (asked again), so a bad answer is never replayed.
+        With `replay`, a cached answer it rejects is still stored but asked
+        again live (and replaced): for verdicts like "nothing found" that
+        depend on which model happened to answer.
         In DEMO_MODE a cached answer is always returned (there is no API to ask).
         """
         key = cache_key(lane, messages, temperature, None, tools, max_tokens)
-        cached = self._from_cache(lane, key, exclude_models)
-        if cached and (accept is None or self.demo_mode or accept(cached)):
+        cached = self._from_cache(lane, key, exclude_models, reuse=lambda r: (
+            (accept is None or accept(r)) and (replay is None or replay(r))))
+        if cached:
             return cached
         response = await self._complete(
             lane, messages, temperature, tools, exclude_models, max_tokens
@@ -194,14 +199,15 @@ class LLMRouter:
         temperature: float = 0.2,
         exclude_models: list[str] | None = None,
         max_tokens: int | None = None,
+        replay: Callable[[LLMResponse], bool] | None = None,
     ) -> AsyncIterator[str | LLMResponse]:
         """Yield text chunks, then one LLMResponse summary.
 
         Switches model only before the first chunk; a failure after that
-        raises LLMStreamError.
+        raises LLMStreamError. `replay` works as in ask().
         """
         key = cache_key(lane, messages, temperature, max_tokens=max_tokens)
-        cached = self._from_cache(lane, key, exclude_models)
+        cached = self._from_cache(lane, key, exclude_models, reuse=replay)
         if cached:
             yield cached.text
             yield cached
@@ -467,11 +473,15 @@ class LLMRouter:
                 return chunk.choices[0].delta.content
         return None
 
-    def _from_cache(self, lane, key, exclude) -> LLMResponse | None:
+    def _from_cache(self, lane, key, exclude, reuse=None) -> LLMResponse | None:
+        """The cached answer for `key`, or None to ask live. With `reuse`, a hit it
+        rejects is not used (and not recorded as a cached call), except in DEMO_MODE."""
         started = self.clock()
         hit = self.cache.get(key)
         if hit and not is_excluded(hit["provider"], hit["model"], exclude):
             response = LLMResponse(**hit, cached=True, latency_ms=self._ms_since(started))
+            if reuse is not None and not self.demo_mode and not reuse(response):
+                return None
             self.state.record(
                 CallRecord(lane, response.provider, response.model, ok=True,
                            latency_ms=response.latency_ms, cached=True)

@@ -1,14 +1,13 @@
 import { NavLink } from 'react-router-dom';
-import { Database, FolderTree, MessageSquare, GitPullRequest, Wrench, Activity } from 'lucide-react';
+import { Database, FolderTree, Code2, GitPullRequest, Activity } from 'lucide-react';
 import { USE_MOCK } from '../../api/client';
 import Logo from '../ui/Logo';
 
 const items = [
   { to: '/repos',     label: 'Repos',         icon: Database },
   { to: '/explorer',  label: 'Explorer',       icon: FolderTree },
-  { to: '/ask',       label: 'Ask',            icon: MessageSquare },
+  { to: '/coder',     label: 'Coder',          icon: Code2 },
   { to: '/pr-review', label: 'PR Review',      icon: GitPullRequest },
-  { to: '/repair',    label: 'Repair',         icon: Wrench },
   { to: '/status',    label: 'System Status',  icon: Activity },
 ];
 

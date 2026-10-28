@@ -1,4 +1,4 @@
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import Shell from './components/layout/Shell';
 import LandingPage from './pages/LandingPage';
@@ -6,13 +6,12 @@ import PageLoader from './components/transition/PageLoader';
 import { LaunchProvider } from './context/LaunchContext';
 import ReposPage from './pages/ReposPage';
 import ExplorerPage from './pages/ExplorerPage';
-import AskPage from './pages/AskPage';
+import CoderPage from './pages/CoderPage';
 import PRReviewPage from './pages/PRReviewPage';
-import RepairPage from './pages/RepairPage';
 import SystemStatusPage from './pages/SystemStatusPage';
 import NotFoundPage from './pages/NotFoundPage';
 
-const ROUTES = ['/repos', '/explorer', '/ask', '/pr-review', '/repair', '/status'];
+const ROUTES = ['/repos', '/explorer', '/coder', '/pr-review', '/status'];
 
 export default function App() {
   const navigate = useNavigate();
@@ -21,7 +20,7 @@ export default function App() {
       if (e.target && (e.target as HTMLElement).tagName === 'INPUT') return;
       if (e.target && (e.target as HTMLElement).tagName === 'TEXTAREA') return;
       const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= 6) {
+      if (n >= 1 && n <= ROUTES.length) {
         navigate(ROUTES[n - 1]);
       }
     }
@@ -36,9 +35,11 @@ export default function App() {
         <Route element={<Shell />}>
           <Route path="/repos" element={<ReposPage />} />
           <Route path="/explorer" element={<ExplorerPage />} />
-          <Route path="/ask" element={<AskPage />} />
+          <Route path="/coder" element={<CoderPage />} />
+          {/* Ask and Repair are now one page */}
+          <Route path="/ask" element={<Navigate to="/coder" replace />} />
+          <Route path="/repair" element={<Navigate to="/coder" replace />} />
           <Route path="/pr-review" element={<PRReviewPage />} />
-          <Route path="/repair" element={<RepairPage />} />
           <Route path="/status" element={<SystemStatusPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

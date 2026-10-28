@@ -6,8 +6,9 @@ repair. This one has the same name, so the agent trace still says "architect".
 
 from pydantic import BaseModel, Field
 
-from app.agents.base import PROMPTS_DIR
+from app.agents.base import PROMPTS_DIR, parse_reply
 from app.agents.roster import Architect
+from app.llm import LLMResponse
 
 
 class RelevantCode(BaseModel):
@@ -33,6 +34,13 @@ class QaArchitect(Architect):
         if self.prompt_text is not None:
             return self.prompt_text
         return (PROMPTS_DIR / "qa_architect.md").read_text(encoding="utf-8")
+
+    def _replayable(self, response: LLMResponse) -> bool:
+        """Never replay a cached "found nothing" verdict: ask the model again."""
+        if response.tool_calls:
+            return True
+        output, _ = self._validate(*parse_reply(response.text))
+        return not (isinstance(output, QaArchitectOutput) and (not output.found or not output.relevant))
 
     def summarize(self, output: QaArchitectOutput) -> str:
         if not output.found or not output.relevant:
