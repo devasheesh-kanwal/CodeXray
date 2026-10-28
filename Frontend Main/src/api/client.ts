@@ -1,8 +1,11 @@
 import { mockFetch, mockStreamPost, mockSubscribeRepairEvents } from './mock';
 import type { AskStreamEvent, ErrorBody, RepairEvent } from './types';
 
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
-const BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+// Production is served by FastAPI on the same origin, so all API calls must
+// stay on that host and go to the real backend. Mock mode and an explicit API
+// host are local-development options only.
+export const USE_MOCK = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === 'true';
+const BASE = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 /** An API error in the backend's standard format. status 0 means the backend was unreachable. */
 export class ApiError extends Error {
