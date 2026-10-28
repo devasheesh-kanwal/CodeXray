@@ -69,6 +69,10 @@ def main() -> int:
     # In that mode, run only the API; serve the built frontend separately/static.
     if production:
         port = int(os.environ.get("PORT", "8000"))
+        # A single Render web service uses its own public URL as the browser
+        # origin unless a separately hosted frontend URL was configured.
+        if not os.environ.get("FRONTEND_ORIGIN") and os.environ.get("RENDER_EXTERNAL_URL"):
+            os.environ["FRONTEND_ORIGIN"] = os.environ["RENDER_EXTERNAL_URL"]
         os.chdir(BACKEND)
         os.execv(python, [python, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(port)])
 
