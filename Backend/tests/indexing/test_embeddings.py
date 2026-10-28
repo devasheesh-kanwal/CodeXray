@@ -107,6 +107,75 @@ def test_gives_up_after_five_tries(tmp_path):
     assert sleeps == [2.0, 4.0, 8.0, 16.0]
 
 
+class Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def make_query_embedder(tmp_path, fake):
+    """An embedder whose clock the test moves, to check the query pause."""
+    embedder, sleeps = make(tmp_path, fake)
+    embedder.clock = Clock()
+    return embedder, sleeps
+
+
+def test_question_gives_up_at_once_when_gemini_asks_for_a_long_wait(tmp_path):
+    # Indexing would wait the 37 s; a question uses BM25 right away instead.
+    fake = FakeGemini(failures=[429], retry_delay="37s")
+    embedder, sleeps = make_query_embedder(tmp_path, fake)
+    with pytest.raises(EmbeddingError, match="retry in 37s"):
+        asyncio.run(embedder.embed_query("how does login work"))
+    assert sleeps == [] and len(fake.requests) == 1
+
+
+def test_questions_skip_the_api_while_rate_limited_then_try_again(tmp_path):
+    fake = FakeGemini(failures=[429], retry_delay="37s")
+    embedder, _ = make_query_embedder(tmp_path, fake)
+    with pytest.raises(EmbeddingError):
+        asyncio.run(embedder.embed_query("first question"))
+    with pytest.raises(EmbeddingError, match="paused"):
+        asyncio.run(embedder.embed_query("second question"))
+    assert len(fake.requests) == 1  # the second question made no request
+
+    embedder.clock.now += 38
+    assert asyncio.run(embedder.embed_query("third question"))
+    assert len(fake.requests) == 2
+
+
+def test_a_cached_question_is_answered_even_while_paused(tmp_path):
+    fake = FakeGemini()
+    embedder, _ = make_query_embedder(tmp_path, fake)
+    asyncio.run(embedder.embed_query("same question"))
+    embedder.queries_paused_until = embedder.clock.now + 60
+    assert asyncio.run(embedder.embed_query("same question"))
+    assert len(fake.requests) == 1
+
+
+def test_question_retries_once_briefly_on_a_server_error(tmp_path):
+    fake = FakeGemini(failures=[503])
+    embedder, sleeps = make_query_embedder(tmp_path, fake)
+    assert asyncio.run(embedder.embed_query("q"))
+    assert sleeps == [2.0] and len(fake.requests) == 2
+
+
+def test_question_gives_up_after_two_tries(tmp_path):
+    fake = FakeGemini(failures=[503, 503, 503])
+    embedder, sleeps = make_query_embedder(tmp_path, fake)
+    with pytest.raises(EmbeddingError):
+        asyncio.run(embedder.embed_query("q"))
+    assert len(fake.requests) == 2 and sum(sleeps) <= 2.0
+
+
+def test_indexing_still_waits_for_a_long_rate_limit(tmp_path):
+    embedder, sleeps = make(tmp_path, FakeGemini(failures=[429], retry_delay="37s"))
+    asyncio.run(embedder.embed_documents(docs(1)))
+    assert sleeps == [37.0]
+    assert embedder.queries_paused_until == 0.0  # indexing does not pause questions
+
+
 def test_bad_key_is_dropped_and_next_key_used(tmp_path, caplog):
     fake = FakeGemini(bad_keys={"AIzaFIRST1111"})
     embedder, _ = make(tmp_path, fake, keys=("AIzaFIRST1111", "AIzaSECOND222"))

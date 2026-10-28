@@ -140,7 +140,7 @@ class SearchArgs(BaseModel):
 async def search_code(ctx: ToolContext, args: SearchArgs) -> ToolResult:
     searcher = ctx.searcher()
     result = await searcher.search(args.query, args.k)
-    _record_search(ctx.state, result.best_score, result.mode)
+    _record_search(ctx.state, result.best_score, result.mode, result.embedding_provider)
     if not result.hits:
         return ToolResult(f"No results for '{args.query}' (mode: {result.mode}).", "no results")
     parts = [f"mode: {result.mode} | best_score: {result.best_score}"]
@@ -155,11 +155,12 @@ async def search_code(ctx: ToolContext, args: SearchArgs) -> ToolResult:
                       f"{len(result.hits)} results ({result.mode}); top {top.file}:{top.start_line}-{top.end_line}")
 
 
-def _record_search(state: RunState, best_score: float, mode: str) -> None:
+def _record_search(state: RunState, best_score: float, mode: str, provider: str | None = None) -> None:
     """Keep the best score this run has seen, for plain-code "not found" gates."""
     seen = state.artifacts.get("search") or {"best_score": 0.0, "mode": mode, "queries": 0}
     seen["best_score"] = max(seen["best_score"], best_score)
     seen["mode"] = mode
+    seen["embedding_provider"] = provider
     seen["queries"] += 1
     state.artifacts["search"] = seen
 

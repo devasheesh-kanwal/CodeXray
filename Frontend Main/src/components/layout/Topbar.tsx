@@ -3,6 +3,7 @@ import { apiFetch, USE_MOCK } from '../../api/client';
 import { useRepo } from '../../context/RepoContext';
 import type { Repo, LLMStatus } from '../../api/types';
 import { ChevronDown } from 'lucide-react';
+import ModelPicker from './ModelPicker';
 import { useState, useEffect, useMemo } from 'react';
 
 
@@ -209,21 +210,7 @@ export default function Topbar() {
           />
           {badge}
         </span>
-        {activeModel && (
-          <span
-            style={{
-              padding: '5px 12px',
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,.10)',
-              background: 'rgba(255,255,255,.05)',
-              color: '#8FA8A0',
-              fontSize: 11,
-              fontFamily: 'JetBrains Mono, monospace',
-            }}
-          >
-            {activeModel}
-          </span>
-        )}
+        <ModelPicker lastModel={activeModel} />
       </div>
     </header>
   );

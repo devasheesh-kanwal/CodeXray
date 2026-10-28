@@ -33,7 +33,11 @@ the real indexing and agents exist.
     [get run](#get-apirepairsrun_id) ·
     [events (SSE)](#get-apirepairsrun_idevents-sse) ·
     [approve / reject](#post-apirepairsrun_idapprove-and-post-apirepairsrun_idreject)
-  - LLM: [GET /api/llm/status](#get-apillmstatus)
+  - LLM: [GET /api/llm/status](#get-apillmstatus) ·
+    [GET /api/llm/models](#get-apillmmodels) ·
+    [PUT /api/llm/selection](#put-apillmselection)
+  - Embeddings: [GET /api/embeddings](#get-apiembeddings) ·
+    [PUT /api/embeddings/selection](#put-apiembeddingsselection)
 - [Repair states](#repair-states)
 - [Reading SSE from the browser](#reading-sse-from-the-browser)
 
@@ -61,7 +65,8 @@ In mock mode:
   20 seconds after you start it, so you can build the live progress UI.
 - With `MOCK_MODE=false`, these endpoints return real data:
   - `/api/health`
-  - `/api/llm/status`
+  - `/api/llm/status`, `/api/llm/models`, `/api/llm/selection`
+  - `/api/embeddings`, `/api/embeddings/selection`
   - the repo endpoints: `GET/POST /api/repos`, `/status`, `/tree`, `/graph`, `/file`
   - Q&A: `/ask` and `/ask/stream`
   - Repair: `POST /api/repos/{repo_id}/repair` and every `/api/repairs/...` endpoint
@@ -220,10 +225,13 @@ Poll this while indexing (every 1–2 s is fine).
 - `chunks_total?` (search units: one per function, method, class header, and
   module-level code), `chunks_embedded?` and `search_mode?` are `null` until
   the stage that sets them.
-- `search_mode`:
+- `search_mode` (for the embedding provider selected right now, see
+  [GET /api/embeddings](#get-apiembeddings)):
   - `hybrid`: keyword plus meaning-based search.
   - `bm25_only`: keyword search only, because embeddings are off, unavailable,
-    or failed. `chunks_embedded` shows how many chunks got a vector before that.
+    or failed, or because the repo has no vectors from the selected provider
+    yet (they are being added after a switch). `chunks_embedded` shows how many
+    chunks got a vector before that.
 - Unknown `repo_id` → `404 NOT_FOUND`.
 
 ### GET /api/repos/{repo_id}/tree
@@ -694,6 +702,97 @@ appear with `cached: true`.
 With `MOCK_MODE=true` this endpoint returns the fixture above. With
 `MOCK_MODE=false` it returns the live router state, and the server always
 answers it, even before the other features are built.
+
+### GET /api/llm/models
+
+Every model the agents can use (all lanes of `routes.yaml`, plus the models of
+`EXTRA_PROVIDERS` from `.env`), its state right now, and which one is picked.
+
+```json
+{
+  "mode": "manual",
+  "selected": "groq/openai/gpt-oss-120b",
+  "models": [
+    {"id": "groq/openai/gpt-oss-120b", "provider": "groq", "model": "openai/gpt-oss-120b",
+     "max_context": 131072, "lanes": ["heavy_code", "reviewer"], "state": "available", "cooldown_until": null},
+    {"id": "gemini/gemini-3.6-flash", "provider": "gemini", "model": "gemini-3.6-flash",
+     "max_context": 1048576, "lanes": ["long_context", "reviewer"], "state": "cooldown",
+     "cooldown_until": "2026-10-28T10:00:30Z"}
+  ]
+}
+```
+
+| Field | Notes |
+|---|---|
+| mode | `auto`: each lane uses its own models in order. After a model fails, the lane stays on the one that answered for 5 minutes before trying its first model again. `manual`: `selected` is tried first by every agent; if it fails, the lane's models answer as in `auto` |
+| selected | A model `id`, or `null` in `auto` mode |
+| models[].id | `"provider/model"`: the value for `PUT /api/llm/selection` |
+| models[].lanes | Lanes that list the model. A picked model is also tried first in the other lanes |
+| models[].state | `available`, `cooldown` (429, skipped until `cooldown_until`), `no_keys`, `disabled` (every key rejected), `unavailable` (not in the provider's model list, or refused with 403 this session) |
+
+### PUT /api/llm/selection
+
+Pick the model every agent tries first, or go back to automatic.
+
+```json
+{"model": "groq/openai/gpt-oss-120b"}
+```
+
+`{"model": null}` = automatic. Returns the same body as `GET /api/llm/models`.
+The choice is saved in `DATA_DIR` and survives restarts. While a model is
+picked, answers cached from other models are not reused, so the picked model
+answers (except in `DEMO_MODE`, which only replays the cache).
+
+The Reviewer still never uses a model that wrote the patch: if the picked model
+wrote it, the review comes from the next model in the reviewer lane.
+
+| Status | Code | When |
+|---|---|---|
+| 422 | `VALIDATION_ERROR` | `model` is not a model `id` from `GET /api/llm/models` (`details.known` lists them) |
+
+### GET /api/embeddings
+
+Which provider makes the vectors for meaning-based search. There are two,
+Gemini and NVIDIA; one is used at a time. The server never switches between
+them by itself: if the selected one fails, search uses BM25 only.
+
+```json
+{
+  "enabled": true,
+  "selected": "nvidia",
+  "providers": [
+    {"id": "gemini", "label": "Gemini", "model": "gemini-embedding-2", "available": true},
+    {"id": "nvidia", "label": "NVIDIA", "model": "nvidia/nemotron-3.5-embed-1b", "available": true}
+  ],
+  "adding_vectors": ["flask-todo-1a2b3c4d"]
+}
+```
+
+| Field | Notes |
+|---|---|
+| enabled | `false` when `EMBEDDINGS=false`: BM25 search only, `selected` has no effect |
+| providers[].available | `false` = no API key for it in `.env` (`GEMINI_API_KEYS` / `NVIDIA_API_KEYS`) |
+| adding_vectors | Repos being embedded with the selected provider right now. They answer with BM25 until it is done |
+
+### PUT /api/embeddings/selection
+
+Switch the embedding provider.
+
+```json
+{"provider": "nvidia"}
+```
+
+Returns the same body as `GET /api/embeddings`. The choice is saved in
+`DATA_DIR` and survives restarts (`EMBEDDING_PROVIDER` in `.env` is the
+default). Each provider's vectors are stored separately per repo, so
+switching back is instant. Ready repos that have no vectors from the new
+provider get them in the background (listed in `adding_vectors`; already
+embedded chunks come from the on-disk cache). While a repo is in
+`adding_vectors`, `POST /api/repos` for it returns `409 INVALID_STATE`.
+
+| Status | Code | When |
+|---|---|---|
+| 422 | `VALIDATION_ERROR` | `provider` is not `gemini` or `nvidia` |
 
 ---
 

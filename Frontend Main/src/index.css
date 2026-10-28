@@ -629,6 +629,18 @@ section:focus { outline: none; }
 }
 .app-shell .coder-suggestions button:hover { color: var(--text); border-color: rgba(255,255,255,.18); }
 
+/* Reply to a /command in the conversation */
+.app-shell .coder-note { font: 400 13.5px/1.55 Inter, sans-serif; color: var(--text); }
+.app-shell .coder-note ul {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font: 400 12px/1.45 "JetBrains Mono", monospace;
+  color: var(--text-muted);
+}
+.app-shell .coder-note li::before { content: "› "; color: var(--sun-amber); }
+
 .app-shell .coder-agent {
   display: inline-flex;
   align-items: center;
@@ -711,3 +723,5 @@ section:focus { outline: none; }
   .orb { animation: none !important; }
   .sun-ray { animation: none !important; }
 }
+.app-shell .coder-spin { animation: coderSpin 0.9s linear infinite; }
+@keyframes coderSpin { to { transform: rotate(360deg); } }

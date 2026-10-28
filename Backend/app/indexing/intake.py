@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.api.schemas.repos import RepoStage
 from app.atomic import write_text_atomic
@@ -39,9 +39,18 @@ class RepoMeta(BaseModel):
     chunks_total: int | None = None
     chunks_embedded: int | None = None
     search_mode: Literal["hybrid", "bm25_only"] | None = None
-    embedding_model: str | None = None
+    embedding_model: str | None = None  # the model the last indexing run embedded with
+    # Models whose vectors match the current chunks (one per embedding provider used).
+    embedded_models: list[str] = Field(default_factory=list)
     error: str | None = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @model_validator(mode="after")
+    def fill_embedded_models(self) -> "RepoMeta":
+        """meta.json files written before switching existed only have embedding_model."""
+        if not self.embedded_models and self.search_mode == "hybrid" and self.embedding_model:
+            self.embedded_models = [self.embedding_model]
+        return self
 
 
 def repo_name(source: str) -> str:

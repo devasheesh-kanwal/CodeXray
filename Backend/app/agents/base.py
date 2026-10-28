@@ -40,11 +40,21 @@ class AgentOutputInvalid(AgentError):
 
 
 def parse_reply(text: str) -> tuple[str, Any]:
-    """('tool', (name, args)) | ('final', data) | ('invalid', reason) for a text reply."""
+    """('tool', (name, args)) | ('final', data) | ('invalid', reason) for a text reply.
+
+    Some models ask for several tools at once, one JSON object per line. Then the
+    first request is used; the model sees its result and can ask for the next one.
+    """
+    body = strip_fences(text).strip()
     try:
-        data = json.loads(strip_fences(text))
+        data = json.loads(body)
     except json.JSONDecodeError:
-        return "invalid", "your reply was not valid JSON"
+        try:
+            data, _ = json.JSONDecoder().raw_decode(body)
+        except json.JSONDecodeError:
+            return "invalid", "your reply was not valid JSON"
+        if not (isinstance(data, dict) and "action" in data):
+            return "invalid", "your reply was not valid JSON"
     if not isinstance(data, dict):
         return "invalid", "your reply must be one JSON object"
     if "action" in data:

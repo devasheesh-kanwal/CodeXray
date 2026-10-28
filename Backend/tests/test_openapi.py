@@ -16,6 +16,10 @@ EXPECTED_OPERATIONS = {
     ("post", "/api/repairs/{run_id}/approve"),
     ("post", "/api/repairs/{run_id}/reject"),
     ("get", "/api/llm/status"),
+    ("get", "/api/llm/models"),
+    ("put", "/api/llm/selection"),
+    ("get", "/api/embeddings"),
+    ("put", "/api/embeddings/selection"),
 }
 
 

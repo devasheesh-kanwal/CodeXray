@@ -148,4 +148,25 @@ export type LLMCall = {
 
 export type LLMStatus = { providers: ProviderStatus[]; recent_calls: LLMCall[] };
 
+/** GET /api/llm/models: every model the agents can use, and which one is picked. */
+export type ModelState = 'available' | 'cooldown' | 'no_keys' | 'disabled' | 'unavailable';
+export type ModelInfo = {
+  id: string; // "provider/model", the value for PUT /api/llm/selection
+  provider: string;
+  model: string;
+  max_context: number;
+  lanes: string[];
+  state: ModelState;
+  cooldown_until: string | null;
+};
+export type ModelsResponse = { mode: 'auto' | 'manual'; selected: string | null; models: ModelInfo[] };
+
+export type EmbeddingProviderId = 'gemini' | 'nvidia';
+export type EmbeddingsResponse = {
+  enabled: boolean;
+  selected: EmbeddingProviderId;
+  providers: { id: EmbeddingProviderId; label: string; model: string; available: boolean }[];
+  adding_vectors: string[];
+};
+
 export type ErrorBody = { code: string; message: string; details: Record<string, unknown> };

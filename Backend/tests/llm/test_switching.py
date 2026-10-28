@@ -48,8 +48,12 @@ def test_cooldown_is_respected_until_it_expires(tmp_path):
     asyncio.run(kit.router.ask(LANE, user("two")))
     assert kit.fake.models_called() == ["small-a", "mid-b", "mid-b"]  # a skipped
 
-    kit.clock.advance(31)
-    response = asyncio.run(kit.router.ask(LANE, user("three")))
+    kit.clock.advance(31)  # a's cooldown is over, but the lane sticks with b for a while
+    asyncio.run(kit.router.ask(LANE, user("three")))
+    assert kit.fake.models_called()[-1] == "mid-b"
+
+    kit.clock.advance(300)  # the sticky window is over: back to the lane's first model
+    response = asyncio.run(kit.router.ask(LANE, user("four")))
     assert response.text == "a is back"
 
 

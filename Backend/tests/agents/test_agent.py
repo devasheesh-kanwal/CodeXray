@@ -176,6 +176,18 @@ def test_parse_reply():
     assert parse_reply("hello")[0] == "invalid"
 
 
+def test_parse_reply_uses_the_first_of_several_tool_requests():
+    # Nemotron 550B asked for two reads at once, one JSON object per line.
+    two = ('{"action": "read_file", "args": {"path": "quantum_sim.py", "start": 179, "end": 296}}\n'
+           '{"action": "read_file", "args": {"path": "quantum_sim.py", "start": 80, "end": 117}}')
+    assert parse_reply(two) == ("tool", ("read_file", {"path": "quantum_sim.py", "start": 179, "end": 296}))
+
+
+def test_parse_reply_still_refuses_a_final_answer_with_trailing_junk():
+    assert parse_reply('{"final": {"x": 1}} and some words')[0] == "invalid"
+    assert parse_reply('{"x": 1}\n{"y": 2}')[0] == "invalid"
+
+
 def test_native_history_is_rewritten_for_json_protocol():
     history = _as_json_history([
         {"role": "user", "content": "q"},

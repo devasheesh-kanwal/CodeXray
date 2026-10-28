@@ -47,7 +47,7 @@ async def main(path: str) -> int:
           f"{report.files_reused} unchanged)")
     print(f"Chunks:           {report.chunks_total} ({report.chunks_embedded} with vectors)")
     print(f"Search mode:      {report.search_mode}")
-    print(f"Embedding model:  {settings.gemini_embedding_model}")
+    print(f"Embedding model:  {service.embedder.label} {service.embedder.model}")
     print(f"Embedding calls:  {report.embedding_api_calls} API requests, "
           f"{report.embedding_cache_hits} chunks from cache")
     return 0

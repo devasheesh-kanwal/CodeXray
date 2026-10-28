@@ -7,7 +7,7 @@ import pytest
 from app.errors import ApiError
 from app.qa.citations import NOT_FOUND_ANSWER
 from tests.conftest import parse_sse
-from tests.llm.fakes import error
+from tests.llm.fakes import error, stream
 from tests.qa.conftest import ARCHITECT_MODEL, EXPLAINER_MODEL, answer, read_file, search, select
 
 FIND_USER = ("shop/services.py", 13, 17)
@@ -108,6 +108,22 @@ def test_explainer_not_found_is_asked_again_not_replayed(qa):
 
     assert first.not_found and not second.not_found
     assert second.citations and second.citations[0].file == "shop/services.py"
+
+
+def test_explainer_asking_for_two_reads_at_once_never_leaks_the_request(qa):
+    # Seen with Nemotron 550B: two tool requests in one reply. The first is run, then the answer.
+    two_reads = stream(
+        '{"action": "read_file", "args": {"path": "shop/services.py", "start": 13, "end": 17}}\n'
+        '{"action": "read_file", "args": {"path": "shop/db.py", "start": 1, "end": 5}}'
+    )
+    qa.fake.on(ARCHITECT_MODEL, search("find user"), select(FIND_USER))
+    qa.fake.on(EXPLAINER_MODEL, two_reads, answer("find_user loads the user [shop/services.py:13-17]."))
+
+    result = qa.ask()
+
+    assert '"action"' not in result.answer
+    assert result.answer == "find_user loads the user [shop/services.py:13-17]."
+    assert result.citations and result.citations[0].file == "shop/services.py"
 
 
 def test_architect_found_false_is_not_found(qa):

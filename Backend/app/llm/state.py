@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from app.api.schemas.llm import LlmCall, LlmStatus, ProviderStatus
-from app.llm.providers import PROVIDERS, KeyPool
+from app.llm.providers import KeyPool
 
 MAX_RECENT_CALLS = 50
 
@@ -52,7 +52,7 @@ class RouterState:
     def status(self, keys: dict[str, KeyPool]) -> LlmStatus:
         """Data for GET /api/llm/status. Calls are oldest first."""
         return LlmStatus(
-            providers=[self._provider_status(name, keys[name]) for name in PROVIDERS],
+            providers=[self._provider_status(name, pool) for name, pool in keys.items()],
             recent_calls=[
                 LlmCall(
                     lane=c.lane,

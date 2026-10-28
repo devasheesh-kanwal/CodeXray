@@ -81,12 +81,20 @@ class QaWorkflow(Workflow):
         state.artifacts["selected_code"] = output.model_dump()
         return "gate"
 
+    def _threshold(self, search: dict) -> float:
+        """Each score scale has its own "not found" line: BM25 word coverage, or the
+        cosine similarity of Gemini or NVIDIA vectors."""
+        if search["mode"] == "bm25_only":
+            return self.settings.not_found_threshold_bm25
+        if search.get("embedding_provider") == "nvidia":
+            return self.settings.not_found_threshold_nvidia
+        return self.settings.not_found_threshold
+
     async def gate(self, state: RunState) -> str:
         """Plain code decides; the Architect's found=true alone is not enough."""
         selected = state.artifacts["selected_code"]
         search = state.artifacts.get("search") or {"best_score": 0.0, "mode": "none"}
-        threshold = (self.settings.not_found_threshold_bm25 if search["mode"] == "bm25_only"
-                     else self.settings.not_found_threshold)
+        threshold = self._threshold(search)
         score = f"best_score {search['best_score']:.2f} (threshold {threshold}, {search['mode']})"
         if not selected["found"] or not selected["relevant"]:
             return self._not_found(state, f"Architect found no relevant code; {score}")

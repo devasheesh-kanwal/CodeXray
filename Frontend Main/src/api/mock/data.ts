@@ -1,6 +1,6 @@
 // Fixtures for VITE_USE_MOCK=true, in the same shapes as Backend/docs/API.md.
 import type {
-  AskResponse, GraphData, IndexStatus, LLMStatus, Repo, RepairEvent, RepairRun,
+  AskResponse, GraphData, IndexStatus, LLMStatus, ModelsResponse, Repo, RepairEvent, RepairRun,
   ReviewResponse, RulesResponse, TreeResponse,
 } from '../types';
 
@@ -203,5 +203,18 @@ export const mockLLMStatus: LLMStatus = {
   recent_calls: [
     { lane: 'qa', provider: 'groq', model: 'llama-3.3-70b-versatile', ok: false, switch_reason: null, latency_ms: 310, cached: false },
     { lane: 'qa', provider: 'nvidia', model: 'meta/llama-3.1-70b-instruct', ok: true, switch_reason: 'groq rate limited (429); cooling down for 60 s', latency_ms: 4120, cached: false },
+  ],
+};
+
+export const mockModels: ModelsResponse = {
+  mode: 'auto',
+  selected: null,
+  models: [
+    { id: 'groq/openai/gpt-oss-120b', provider: 'groq', model: 'openai/gpt-oss-120b', max_context: 131072, lanes: ['heavy_code', 'reviewer'], state: 'available', cooldown_until: null },
+    { id: 'groq/openai/gpt-oss-20b', provider: 'groq', model: 'openai/gpt-oss-20b', max_context: 131072, lanes: ['fast_small', 'reviewer'], state: 'available', cooldown_until: null },
+    { id: 'gemini/gemini-3.6-flash', provider: 'gemini', model: 'gemini-3.6-flash', max_context: 1048576, lanes: ['long_context', 'reviewer'], state: 'cooldown', cooldown_until: '2026-10-28T10:00:30Z' },
+    { id: 'gemini/gemini-3.5-flash-lite', provider: 'gemini', model: 'gemini-3.5-flash-lite', max_context: 1048576, lanes: ['heavy_code', 'long_context', 'fast_small', 'reviewer'], state: 'available', cooldown_until: null },
+    { id: 'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free', provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free', max_context: 1000000, lanes: ['long_context', 'reviewer'], state: 'available', cooldown_until: null },
+    { id: 'deepseek/deepseek-chat', provider: 'deepseek', model: 'deepseek-chat', max_context: 65536, lanes: ['heavy_code'], state: 'no_keys', cooldown_until: null },
   ],
 };

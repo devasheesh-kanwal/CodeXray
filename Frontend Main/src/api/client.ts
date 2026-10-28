@@ -56,6 +56,10 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return apiFetch<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
 }
 
+export function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return apiFetch<T>(path, { method: 'PUT', body: JSON.stringify(body) });
+}
+
 /** Parse one SSE block ("event: x\ndata: {...}") into {event, data}. */
 function parseBlock(block: string): { event: string; data: unknown } | null {
   let event = 'message';

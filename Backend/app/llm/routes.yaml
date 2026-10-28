@@ -2,8 +2,9 @@
 # max_context = the model's context window in tokens (from Groq/OpenRouter
 # model lists and Google's model pages).
 # Every entry answered a real request on 2026-10-27 (scripts/check_providers.py).
-# Not used for now: NVIDIA (models 404 "not found for account" or time out)
-# and DeepSeek (402 insufficient balance). Re-add them once they answer.
+# NVIDIA: nemotron-3-ultra-550b-a55b answered on 2026-10-28 (the same model OpenRouter
+# lists with a 1,000,000-token context). Other NVIDIA models still 404 for these keys.
+# Not used for now: DeepSeek (402 insufficient balance). Re-add it once it answers.
 # Run scripts/check_providers.py after changing anything here.
 
 lanes:
@@ -11,6 +12,7 @@ lanes:
   heavy_code:
     - {provider: groq, model: openai/gpt-oss-120b, max_context: 131072}
     - {provider: groq, model: qwen/qwen3.8-27b, max_context: 131072}
+    - {provider: nvidia, model: nvidia/nemotron-3-ultra-550b-a55b, max_context: 1000000}
     - {provider: openrouter, model: "poolside/laguna-s-2.1:free", max_context: 262144}
     - {provider: openrouter, model: "cohere/north-mini-code:free", max_context: 256000}
     # Last resort when Groq hits its per-minute token limit (added 2026-10-27)
@@ -19,6 +21,8 @@ lanes:
   # Q&A over a lot of code
   long_context:
     - {provider: gemini, model: gemini-3.6-flash, max_context: 1048576}
+    # Same model as the next entry, straight from NVIDIA: about 2 s instead of up to a minute
+    - {provider: nvidia, model: nvidia/nemotron-3-ultra-550b-a55b, max_context: 1000000}
     - {provider: openrouter, model: "nvidia/nemotron-3-ultra-550b-a55b:free", max_context: 1000000}
     - {provider: gemini, model: gemini-3.5-flash-lite, max_context: 1048576}
 
@@ -34,6 +38,7 @@ lanes:
   # exclude_models skips it here and the next entry answers.
   reviewer:
     - {provider: gemini, model: gemini-3.6-flash, max_context: 1048576}
+    - {provider: nvidia, model: nvidia/nemotron-3-ultra-550b-a55b, max_context: 1000000}
     - {provider: gemini, model: gemini-3.5-flash-lite, max_context: 1048576}
     - {provider: openrouter, model: "nvidia/nemotron-3-ultra-550b-a55b:free", max_context: 1000000}
     - {provider: groq, model: openai/gpt-oss-120b, max_context: 131072}

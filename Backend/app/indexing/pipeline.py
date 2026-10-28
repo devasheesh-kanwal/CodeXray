@@ -14,12 +14,13 @@ from pathlib import Path
 
 from app.config import Settings
 from app.indexing.bm25 import build_bm25, save_bm25
-from app.indexing.chunker import Chunk, chunk_file, save_chunks
+from app.indexing.chunker import Chunk, chunk_file, load_chunks, save_chunks
 from app.indexing.embedder import (
+    Embedder,
     EmbeddingCache,
     EmbeddingError,
     GeminiEmbedder,
-    document_text,
+    NvidiaEmbedder,
 )
 from app.indexing.files import list_source_files
 from app.indexing.graph import build_graph, save_graph
@@ -49,15 +50,21 @@ class IndexReport:
     timings: dict[str, float] = field(default_factory=dict)
 
 
-def make_embedder(settings: Settings, transport=None, sleep=asyncio.sleep) -> GeminiEmbedder:
-    return GeminiEmbedder(
-        model=settings.gemini_embedding_model,
-        keys=[k.get_secret_value() for k in settings.gemini_api_keys],
-        cache=EmbeddingCache(settings.data_path / "embedding_cache.sqlite"),
-        demo_mode=settings.demo_mode,
-        transport=transport,
-        sleep=sleep,
-    )
+def make_embedders(settings: Settings, transport=None, sleep=asyncio.sleep) -> dict[str, Embedder]:
+    """Both embedding providers, by name. They share one cache file (keys include the model)."""
+    cache = EmbeddingCache(settings.data_path / "embedding_cache.sqlite")
+    common = {"cache": cache, "demo_mode": settings.demo_mode, "transport": transport, "sleep": sleep}
+    return {
+        "gemini": GeminiEmbedder(settings.gemini_embedding_model,
+                                 [k.get_secret_value() for k in settings.gemini_api_keys], **common),
+        "nvidia": NvidiaEmbedder(settings.nvidia_embedding_model,
+                                 [k.get_secret_value() for k in settings.nvidia_api_keys], **common),
+    }
+
+
+def make_embedder(settings: Settings, transport=None, sleep=asyncio.sleep) -> Embedder:
+    """The embedder of EMBEDDING_PROVIDER."""
+    return make_embedders(settings, transport, sleep)[settings.embedding_provider]
 
 
 class Indexer:
@@ -65,7 +72,7 @@ class Indexer:
         self,
         settings: Settings,
         router: LLMRouter | None = None,
-        embedder: GeminiEmbedder | None = None,
+        embedder: Embedder | None = None,
         on_update: Callable[[RepoMeta], None] | None = None,
     ) -> None:
         self.settings = settings
@@ -161,16 +168,17 @@ class Indexer:
 
     async def _embed(self, meta: RepoMeta, chunks: list[Chunk], folder: Path, report) -> None:
         meta.embedding_model = None
+        meta.embedded_models = []  # the chunks may have changed: older vectors no longer match
         if not self.settings.embeddings:
             return self._bm25_only(meta, report, 0, "EMBEDDINGS=false")
         if not self.embedder.available:
-            return self._bm25_only(meta, report, 0, "no GEMINI_API_KEYS")
+            return self._bm25_only(meta, report, 0, f"no {self.embedder.provider.upper()}_API_KEYS")
         calls_before = self.embedder.api_calls
         hits_before = self.embedder.cache_hits
         try:
             vectors = await self.embedder.embed_documents([(c.id, c.text) for c in chunks])
         except EmbeddingError as exc:
-            embedded = self._cached_count(chunks)
+            embedded = self.embedder.cached_count([(c.id, c.text) for c in chunks])
             return self._bm25_only(meta, report, embedded, str(exc))
         finally:
             report.embedding_api_calls = self.embedder.api_calls - calls_before
@@ -184,19 +192,33 @@ class Indexer:
         meta.search_mode, report.search_mode = "hybrid", "hybrid"
         meta.chunks_embedded = report.chunks_embedded = len(chunks)
         meta.embedding_model = self.embedder.model
+        meta.embedded_models = [self.embedder.model]
         self.on_update(meta)
+
+    async def add_vectors(self, meta: RepoMeta) -> bool:
+        """Embed an already indexed repo with this embedder (after a switch), keeping
+        its other vectors. The repo stays 'ready' and searchable meanwhile."""
+        folder = repo_dir(self.data_dir, meta.repo_id)
+        chunks = await asyncio.to_thread(load_chunks, folder / "chunks.json")
+        try:
+            vectors = await self.embedder.embed_documents([(c.id, c.text) for c in chunks])
+        except EmbeddingError as exc:
+            logger.warning("%s: no %s vectors yet (%s)", meta.repo_id, self.embedder.label, exc)
+            return False
+        if any(v is None for v in vectors):  # DEMO_MODE cache misses
+            return False
+        store = VectorStore.for_indexing(folder / "chroma", self.embedder.model)
+        await asyncio.to_thread(store.replace_all, chunks, vectors)
+        if self.embedder.model not in meta.embedded_models:
+            meta.embedded_models.append(self.embedder.model)
+        self.on_update(meta)
+        return True
 
     def _bm25_only(self, meta: RepoMeta, report: IndexReport, embedded: int, reason: str) -> None:
         logger.warning("%s: BM25-only search (%s)", meta.repo_id, reason)
         meta.search_mode, report.search_mode = "bm25_only", "bm25_only"
         meta.chunks_embedded = report.chunks_embedded = embedded
         self.on_update(meta)
-
-    def _cached_count(self, chunks: list[Chunk]) -> int:
-        """How many chunks already have a vector in the cache."""
-        keys = [self.embedder.cache.key(self.embedder.model, document_text(c.id, c.text))
-                for c in chunks]
-        return len(self.embedder.cache.get_many(keys))
 
     async def _summaries(self, skeleton: Skeleton, sources: dict, report: IndexReport) -> None:
         """Summaries for files that don't have one yet (new or changed files)."""
