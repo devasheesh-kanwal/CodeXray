@@ -3,8 +3,10 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
@@ -22,6 +24,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 ERROR_RESPONSES = {
     code: {"model": ErrorResponse} for code in (404, 409, 422, 500, 501)
 }
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "Frontend Main" / "dist"
 
 
 @asynccontextmanager
@@ -64,6 +67,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     for module in (health, repos, qa, review, repair, llm):
         app.include_router(module.router)
+
+    def frontend_file(path: str = "") -> FileResponse:
+        """Serve built frontend files and route browser navigation through its SPA."""
+        index = FRONTEND_DIST / "index.html"
+        if not index.is_file():
+            raise HTTPException(status_code=503, detail="Frontend build is missing")
+
+        requested = (FRONTEND_DIST / path).resolve()
+        if requested != FRONTEND_DIST and FRONTEND_DIST not in requested.parents:
+            raise HTTPException(status_code=404, detail="Not found")
+        if requested.is_file():
+            return FileResponse(requested)
+        if path == "" or (path != "api" and not path.startswith("api/")):
+            return FileResponse(index)
+        raise HTTPException(status_code=404, detail="Not found")
+
+    app.add_api_route("/", frontend_file, methods=["GET"], include_in_schema=False)
+    app.add_api_route("/{path:path}", frontend_file, methods=["GET"], include_in_schema=False)
     return app
 
 
