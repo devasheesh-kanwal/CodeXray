@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: codexray
+    runtime: python
+    buildCommand: >-
+      pip install -r requirements.txt &&
+      cd "Frontend Main" &&
+      npm ci &&
+      npm run build
+    startCommand: python app.py

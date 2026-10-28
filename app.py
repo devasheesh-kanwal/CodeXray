@@ -9,6 +9,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "Backend"
 FRONTEND = ROOT / "Frontend Main"
+# The backend is a package rooted at Backend/, while this launcher lives at the
+# repository root. Make its import path explicit for both local and hosted runs.
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
 
 
 def available_port(start: int) -> int:
@@ -65,6 +69,7 @@ def main() -> int:
     # In that mode, run only the API; serve the built frontend separately/static.
     if production:
         port = int(os.environ.get("PORT", "8000"))
+        os.chdir(BACKEND)
         os.execv(python, [python, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", str(port)])
 
     frontend_port = available_port(5173)
